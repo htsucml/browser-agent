@@ -1,0 +1,12 @@
+__pycache__/
+.pytest_cache/
+*.pyc
+
+logs/runs/*.json
+logs/eval_report.json
+logs/eval_report.md
+!logs/.gitkeep
+
+.env
+.venv/
+venv/

@@ -17,6 +17,11 @@ app = FastAPI(title="Browser Agent Scaffold")
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 
+@app.get("/health")
+def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(

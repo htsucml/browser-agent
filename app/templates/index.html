@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Browser Agent Scaffold</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        color: #1f2933;
+        background: #f7f9fb;
+      }
+      main {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 32px 20px;
+      }
+      form, .result, .trace {
+        background: #ffffff;
+        border: 1px solid #d9e2ec;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+      }
+      label {
+        display: block;
+        font-weight: 700;
+        margin: 0 0 8px;
+      }
+      input, textarea {
+        box-sizing: border-box;
+        width: 100%;
+        border: 1px solid #bcccdc;
+        border-radius: 6px;
+        padding: 10px 12px;
+        margin-bottom: 16px;
+        font: inherit;
+      }
+      textarea {
+        min-height: 92px;
+      }
+      button {
+        border: 0;
+        border-radius: 6px;
+        padding: 10px 14px;
+        background: #1769aa;
+        color: white;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+      }
+      th, td {
+        border-bottom: 1px solid #d9e2ec;
+        padding: 8px;
+        text-align: left;
+        vertical-align: top;
+      }
+      pre {
+        overflow: auto;
+        background: #102a43;
+        color: #f0f4f8;
+        padding: 16px;
+        border-radius: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Browser Agent Scaffold</h1>
+      <form method="post" action="/run">
+        <label for="start_url">URL</label>
+        <input id="start_url" name="start_url" value="{{ start_url }}" required>
+        <label for="task">Task</label>
+        <textarea id="task" name="task" required>{{ task }}</textarea>
+        <button type="submit">Run</button>
+      </form>
+
+      {% if result %}
+      <section class="result">
+        <h2>Result</h2>
+        <p><strong>Status:</strong> {{ result.status }}</p>
+        <p><strong>Verified:</strong> {{ result.verified }}</p>
+        <p><strong>Final reason:</strong> {{ result.final_reason }}</p>
+        <p><strong>Trace:</strong> {{ result.trace_path }}</p>
+      </section>
+      <section class="trace">
+        <h2>Actions</h2>
+        <table>
+          <thead>
+            <tr><th>Step</th><th>Action</th><th>Target</th><th>Status</th><th>Strategy</th></tr>
+          </thead>
+          <tbody>
+            {% for action in trace.actions %}
+            <tr>
+              <td>{{ action.step }}</td>
+              <td>{{ action.action_type }}</td>
+              <td>{{ action.target }}</td>
+              <td>{{ action.status }}</td>
+              <td>{{ action.locator_strategy }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <h2>Trace JSON</h2>
+        <pre>{{ trace | tojson(indent=2) }}</pre>
+      </section>
+      {% endif %}
+    </main>
+  </body>
+</html>

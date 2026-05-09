@@ -44,11 +44,11 @@ The web app keeps simulator tasks as the default. For `http://` or `https://` UR
 
 ## Read-Only Online Smoke
 
-Install Playwright and its browser binary, then run:
+Install Playwright and its browser binary locally, then run:
 
 ```bash
 python3 -m pip install -r requirements.txt
-python3 -m playwright install chromium
+python3 -m playwright install --with-deps chromium
 python3 -m browser_agent.run_readonly --url https://example.com --task "Return the page title and main visible text."
 ```
 
@@ -56,18 +56,36 @@ The read-only runner writes a trace to `logs/runs/` and reports success only whe
 
 ## Docker
 
+The Docker image installs Playwright Chromium and creates `logs/runs/` for trace output.
+
 ```bash
-docker build -t browser-agent-task2 .
-docker run --rm -p 8000:8000 -e PORT=8000 browser-agent-task2
+docker build -t browser-agent-baseline .
+docker run --rm -p 8000:8000 -e PORT=8000 browser-agent-baseline
+```
+
+Health check:
+
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+Container read-only online smoke:
+
+```bash
+curl -X POST http://127.0.0.1:8000/run \
+  -F "start_url=https://example.com" \
+  -F "task=Return the page title and main visible text."
 ```
 
 ## Zeabur Notes
 
-Zeabur can build this Dockerfile directly. The app command reads the `PORT` environment variable:
+Zeabur can build this Dockerfile directly. The image installs Chromium during build, and the app command reads Zeabur's `PORT` environment variable:
 
 ```bash
 python3 -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT}
 ```
+
+Use `/health` as a lightweight health route.
 
 ## Current Fake or Stubbed Pieces
 
