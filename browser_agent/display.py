@@ -91,6 +91,9 @@ def _normalize_answer(raw_answer: Any) -> dict[str, Any]:
         if parsed is not None:
             return _normalize_answer(parsed)
         text = raw_answer.strip()
+        inline_bullet_lines = _split_collapsed_inline_bullets(text)
+        if inline_bullet_lines:
+            return {"text": "\n".join(inline_bullet_lines), "lines": inline_bullet_lines}
         bullet_lines = _extract_markdown_bullet_lines(text)
         if bullet_lines:
             return {"text": "\n".join(bullet_lines), "lines": bullet_lines}
@@ -115,6 +118,17 @@ def _extract_markdown_bullet_lines(value: str) -> list[str]:
     if not lines:
         return []
     return lines if all(line.startswith(("- ", "* ")) for line in lines) else []
+
+
+def _split_collapsed_inline_bullets(value: str) -> list[str]:
+    # Handles UI-collapsed Markdown such as "- item one - item two - item three".
+    if "\n" in value or not value.startswith(("- ", "* ")):
+        return []
+    marker = value[:2]
+    pieces = [piece.strip() for piece in value[2:].split(f" {marker}") if piece.strip()]
+    if len(pieces) < 2:
+        return []
+    return [f"{marker}{piece}" for piece in pieces]
 
 
 def _summarize_safety(events: list[dict[str, Any]]) -> str:

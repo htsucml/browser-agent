@@ -102,6 +102,28 @@ def test_display_result_formats_markdown_bullets_as_lines():
     assert display.answer == "- First complete point.\n- Second complete point."
 
 
+def test_display_result_splits_collapsed_inline_bullets():
+    trace = AgentTrace(
+        run_id="readonly_collapsed_bullets",
+        case_id=None,
+        start_url="https://example.com",
+        task="Summarize",
+        status="success",
+        verified=True,
+        final_evidence={
+            "reason": "Page loaded.",
+            "url": "https://example.com",
+            "title": "Example",
+            "llm_answer": "- item one - item two - item three",
+        },
+    )
+
+    display = build_display_result(trace, "trace.json")
+
+    assert display.answer_lines == ["- item one", "- item two", "- item three"]
+    assert display.answer == "- item one\n- item two\n- item three"
+
+
 def test_failure_analysis_groups_failed_cases_deterministically(tmp_path):
     trace_path = tmp_path / "trace.json"
     trace = AgentTrace(

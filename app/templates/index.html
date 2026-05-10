@@ -71,6 +71,10 @@
         font-size: 0.94rem;
         line-height: 1.4;
       }
+      .answer-text {
+        white-space: pre-wrap;
+        line-height: 1.5;
+      }
     </style>
   </head>
   <body>
@@ -118,7 +122,7 @@
           {% endfor %}
         </ul>
         {% else %}
-        <p>{{ display_result.answer }}</p>
+        <p class="answer-text">{{ display_result.answer }}</p>
         {% endif %}
         {% if display_result.answer_warning %}
         <p class="notice">{{ display_result.answer_warning }}</p>
