@@ -28,6 +28,8 @@ def _clear_env(monkeypatch):
         "MAX_STEPS",
         "MAX_LLM_CALLS_PER_RUN",
         "MAX_OUTPUT_TOKENS",
+        "MAX_EXTRACT_CHARS",
+        "REQUEST_TIMEOUT_SECONDS",
         "OPENAI_API_KEY",
     ]:
         monkeypatch.delenv(name, raising=False)
@@ -39,8 +41,14 @@ def _request(host: str = "testclient"):
 
 def test_byok_disabled_by_default(monkeypatch):
     _clear_env(monkeypatch)
-    assert AppConfig.from_env().allow_byok is False
-    assert AppConfig.from_env().allow_server_openai_key is False
+    app_config = AppConfig.from_env()
+    assert app_config.allow_byok is False
+    assert app_config.allow_server_openai_key is False
+    assert app_config.max_active_runs == 1
+    assert app_config.rate_limit_runs == 5
+    assert app_config.rate_limit_window_seconds == 600
+    assert app_config.max_run_seconds == 30
+    assert app_config.max_extract_chars == 10000
 
 
 def test_byok_disabled_rejects_request_key(monkeypatch):
@@ -164,6 +172,64 @@ def test_health_public_when_demo_token_set(monkeypatch):
     assert app_main.health() == {"status": "ok"}
 
 
+def test_run_endpoint_rejects_missing_demo_token(monkeypatch):
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("DEMO_TOKEN", "demo-secret")
+
+    with pytest.raises(HTTPException) as exc:
+        app_main.run_task(
+            _request(),
+            start_url="simulator://settings?variant=normal",
+            task="Turn on weekly summary emails.",
+            planner="rule",
+            llm_provider="fake",
+            llm_model="gpt-4.1-nano",
+            openai_api_key="",
+            demo_token="",
+        )
+
+    assert exc.value.status_code == 401
+    assert "demo-secret" not in str(exc.value.detail)
+
+
+def test_run_endpoint_rejects_wrong_demo_token(monkeypatch):
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("DEMO_TOKEN", "demo-secret")
+
+    with pytest.raises(HTTPException) as exc:
+        app_main.run_task(
+            _request(),
+            start_url="simulator://settings?variant=normal",
+            task="Turn on weekly summary emails.",
+            planner="rule",
+            llm_provider="fake",
+            llm_model="gpt-4.1-nano",
+            openai_api_key="",
+            demo_token="wrong",
+        )
+
+    assert exc.value.status_code == 403
+    assert "demo-secret" not in str(exc.value.detail)
+
+
+def test_run_endpoint_accepts_correct_demo_token(monkeypatch):
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("DEMO_TOKEN", "demo-secret")
+
+    response = app_main.run_task(
+        _request(),
+        start_url="simulator://settings?variant=normal",
+        task="Turn on weekly summary emails.",
+        planner="rule",
+        llm_provider="fake",
+        llm_model="gpt-4.1-nano",
+        openai_api_key="",
+        demo_token="demo-secret",
+    )
+
+    assert response.status_code == 200
+
+
 def test_rate_limit_rejects_excessive_requests():
     _reset_app_guards()
     config = AppConfig(rate_limit_runs=1, rate_limit_window_seconds=600)
@@ -182,11 +248,37 @@ def test_max_active_runs_guard():
     _reset_app_guards()
 
 
+def test_run_slot_is_released_when_run_raises(monkeypatch):
+    _clear_env(monkeypatch)
+
+    def boom(*args, **kwargs):
+        raise HTTPException(status_code=503, detail="boom")
+
+    monkeypatch.setattr(app_main, "_run_with_timeout", boom)
+    with pytest.raises(HTTPException):
+        app_main.run_task(
+            _request(),
+            start_url="simulator://settings?variant=normal",
+            task="Turn on weekly summary emails.",
+            planner="rule",
+            llm_provider="fake",
+            llm_model="fake",
+            openai_api_key="",
+            demo_token="",
+        )
+
+    assert app_main._ACTIVE_RUNS == 0
+
+
 def test_private_and_internal_urls_are_blocked():
     for url in [
         "http://127.0.0.1:8000",
+        "http://0.0.0.0",
+        "http://[::1]:8000",
         "http://localhost:8000",
         "http://10.0.0.5",
+        "http://172.16.0.1",
+        "http://192.168.1.1",
         "http://169.254.169.254/latest/meta-data",
         "file:///etc/passwd",
     ]:
@@ -201,3 +293,4 @@ def test_ui_key_inputs_are_password_and_not_prepopulated():
     assert 'name="openai_api_key" type="password" autocomplete="off" value=""' in template
     assert 'id="demo_token"' in template
     assert 'name="demo_token" type="password" autocomplete="off" value=""' in template
+    assert "BYOK sends your key to this backend for this one request only" in template

@@ -128,9 +128,12 @@ ALLOW_BYOK=true \
 ALLOW_SERVER_OPENAI_KEY=false \
 DEMO_TOKEN=local-demo-password \
 MAX_ACTIVE_RUNS=1 \
+RATE_LIMIT_RUNS=5 \
+RATE_LIMIT_WINDOW_SECONDS=600 \
 MAX_LLM_CALLS_PER_RUN=1 \
 MAX_STEPS=3 \
 MAX_OUTPUT_TOKENS=300 \
+REQUEST_TIMEOUT_SECONDS=30 \
 MAX_RUN_SECONDS=30 \
 MAX_EXTRACT_CHARS=10000 \
 python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000
@@ -145,14 +148,17 @@ ALLOW_BYOK=true
 ALLOW_SERVER_OPENAI_KEY=false
 DEMO_TOKEN=<random-password>
 MAX_ACTIVE_RUNS=1
+RATE_LIMIT_RUNS=5
+RATE_LIMIT_WINDOW_SECONDS=600
 MAX_LLM_CALLS_PER_RUN=1
 MAX_STEPS=3
 MAX_OUTPUT_TOKENS=300
+REQUEST_TIMEOUT_SECONDS=30
 MAX_RUN_SECONDS=30
 MAX_EXTRACT_CHARS=10000
 ```
 
-Do not enter secrets unless you trust the deployment. A BYOK request sends the key to this backend for that request only.
+Do not enter secrets unless you trust the deployment. A BYOK request sends the key to this backend for that request only. Keep real-web mode read-only, do not set `OPENAI_API_KEY` on public Zeabur, and suspend the service when you are done testing.
 
 ## Start Web App
 

@@ -95,7 +95,7 @@
         <input id="llm_model" name="llm_model" value="{{ llm_model }}" autocomplete="off">
         <label for="openai_api_key">BYOK OpenAI key</label>
         <input id="openai_api_key" name="openai_api_key" type="password" autocomplete="off" value="">
-        <p class="notice">For BYOK runs, the key is sent to this backend for this one request only. Do not enter secrets unless you trust this deployment.</p>
+        <p class="notice">BYOK sends your key to this backend for this one request only. Do not use unless you trust this deployment.</p>
         {% if demo_token_enabled %}
         <label for="demo_token">Demo token</label>
         <input id="demo_token" name="demo_token" type="password" autocomplete="off" value="">
