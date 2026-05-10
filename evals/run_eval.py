@@ -58,10 +58,12 @@ def load_trace(path: str | Path) -> AgentTrace:
     return trace
 
 
-def run_eval(cases_path: str | Path, case_id: str | None = None) -> list:
+def run_eval(cases_path: str | Path, case_id: str | None = None, max_cases: int | None = None) -> list:
     cases = load_cases(cases_path)
     if case_id:
         cases = [case for case in cases if case.id == case_id]
+    if max_cases is not None:
+        cases = cases[:max_cases]
     results = []
     for case in cases:
         agent = BrowserAgent()
@@ -86,8 +88,9 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cases", default="evals/cases.json")
     parser.add_argument("--case")
+    parser.add_argument("--max-cases", type=int)
     args = parser.parse_args()
-    results = run_eval(args.cases, case_id=args.case)
+    results = run_eval(args.cases, case_id=args.case, max_cases=args.max_cases)
     print(json.dumps({"cases": len(results), "verified_successes": sum(item.verified_success for item in results)}, indent=2))
 
 

@@ -1,4 +1,5 @@
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,7 @@ from browser_agent.llm_planner import LLMPlanner
 from browser_agent.planner import RulePlanner
 from browser_agent.redaction import redact_secrets
 from browser_agent.schemas import ExpectedCheck
+from evals.run_eval import run_eval
 
 
 def test_rule_planner_remains_default(monkeypatch):
@@ -138,3 +140,47 @@ def test_openai_provider_missing_key_fails_gracefully(monkeypatch):
     assert result.status == "failed"
     assert trace["failures"][0]["category"] == "planning_error"
     assert "OPENAI_API_KEY is required" in trace["failures"][0]["cause"]
+
+
+def test_run_eval_case_filter_runs_only_requested_case(monkeypatch):
+    monkeypatch.delenv("PLANNER", raising=False)
+    results = run_eval("evals/cases_v1.json", case_id="support_validation_001")
+    assert len(results) == 1
+    assert results[0].case_id == "support_validation_001"
+
+
+def test_run_eval_max_cases_limits_case_count(monkeypatch):
+    monkeypatch.delenv("PLANNER", raising=False)
+    results = run_eval("evals/cases_v1.json", max_cases=2)
+    assert len(results) == 2
+
+
+def test_fake_smoke_script_runs_without_api_key(monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    result = subprocess.run(["sh", "scripts/llm_smoke_fake.sh"], check=True, capture_output=True, text=True)
+    payload = json.loads(result.stdout)
+    assert payload["cases"] == 1
+
+
+def test_missing_openai_key_does_not_log_secret_like_env_value(monkeypatch):
+    secret = "sk-shouldNotAppear123456789"
+    monkeypatch.setenv("OPENAI_API_KEY_BACKUP", secret)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    agent = BrowserAgent(config=PlannerConfig(planner="llm", llm_provider="openai"))
+    result = agent.run("simulator://shopping", "Add Red Shoes to the cart.")
+    trace_text = Path(result.trace_path).read_text(encoding="utf-8")
+    assert secret not in trace_text
+    assert "OPENAI_API_KEY is required" in trace_text
+
+
+def test_max_llm_call_cap_is_respected_with_fake_client():
+    client = FakeLLMClient(responses=[{"action_type": "stop", "reason": "first"}])
+    config = PlannerConfig(planner="llm", llm_provider="fake", max_llm_calls_per_run=1)
+    agent = BrowserAgent(config=config)
+    agent.planner = LLMPlanner(client, config)
+    snapshot = agent.observer.observe(agent.browser)
+    agent.planner.plan("First call", snapshot, [])
+    plan = agent.planner.plan("Second call", snapshot, [])
+    assert client.call_count == 1
+    assert plan.actions == []
+    assert "MAX_LLM_CALLS_PER_RUN" in plan.reason
