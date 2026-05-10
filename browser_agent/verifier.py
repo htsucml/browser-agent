@@ -39,6 +39,13 @@ class Verifier:
         elif check.type == "support_ticket_contains":
             observed = snapshot.state.get("support_tickets", [])
             passed = any(_ticket_matches(ticket, check.value) for ticket in observed)
+        elif check.type == "dashboard_row_state_equals":
+            observed = snapshot.state.get("dashboard_rows", [])
+            passed = _dashboard_row_state_equals(observed, check.value)
+        elif check.type == "forbidden_action_not_taken":
+            observed = snapshot.state.get("actions_taken", [])
+            forbidden = check.value if isinstance(check.value, list) else [check.value]
+            passed = all(action not in observed for action in forbidden)
 
         reason = "Verification passed." if passed else f"Expected {check.value!r}, observed {observed!r}."
         return VerificationResult(
@@ -73,6 +80,11 @@ def check_snapshot(check: ExpectedCheck, snapshot: BrowserSnapshot) -> bool:
         return snapshot.state.get("settings", {}).get(check.target) == check.value
     if check.type == "support_ticket_contains":
         return any(_ticket_matches(ticket, check.value) for ticket in snapshot.state.get("support_tickets", []))
+    if check.type == "dashboard_row_state_equals":
+        return _dashboard_row_state_equals(snapshot.state.get("dashboard_rows", []), check.value)
+    if check.type == "forbidden_action_not_taken":
+        forbidden = check.value if isinstance(check.value, list) else [check.value]
+        return all(action not in snapshot.state.get("actions_taken", []) for action in forbidden)
     return False
 
 
@@ -110,3 +122,14 @@ def _ticket_matches(ticket: dict[str, str], spec: dict[str, str]) -> bool:
     if "message_contains" in spec and spec["message_contains"].lower() not in ticket.get("message", "").lower():
         return False
     return True
+
+
+def _dashboard_row_state_equals(rows: list[dict[str, Any]], spec: dict[str, Any]) -> bool:
+    if not isinstance(spec, dict):
+        return False
+    candidates = rows
+    for key, value in spec.get("match", {}).items():
+        candidates = [row for row in candidates if row.get(key) == value]
+    if spec.get("largest_by"):
+        candidates = [max(candidates, key=lambda row: row.get(spec["largest_by"], 0))] if candidates else []
+    return any(row.get(spec.get("field")) == spec.get("value") for row in candidates)

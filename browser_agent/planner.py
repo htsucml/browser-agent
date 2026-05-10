@@ -60,6 +60,15 @@ class RulePlanner:
                     reason="Rule matched cheapest wishlist shopping task.",
                 )
 
+        if "invoice" in lowered and "overdue" in lowered and "largest amount" in lowered and "review" in lowered:
+            invoice = self._choose_largest_overdue_invoice(snapshot)
+            if invoice:
+                return Plan(
+                    actions=[PlannedAction(action_type="click", target_hint=f"mark {invoice['id']} for review")],
+                    expected=expected,
+                    reason="Rule matched largest overdue invoice review task.",
+                )
+
         if "add" in lowered and "cart" in lowered:
             product = self._choose_cart_product(task, snapshot, expected)
             return Plan(
@@ -68,6 +77,17 @@ class RulePlanner:
                 reason="Rule matched add-to-cart shopping task.",
             )
         return Plan(actions=[], expected=expected, reason="No rule matched; safe failure.")
+
+    def _choose_largest_overdue_invoice(self, snapshot: BrowserSnapshot) -> dict[str, Any] | None:
+        rows = snapshot.state.get("dashboard_rows", [])
+        invoices = [
+            row
+            for row in rows
+            if row.get("kind") == "invoice" and row.get("status") == "overdue" and isinstance(row.get("amount"), (int, float))
+        ]
+        if not invoices:
+            return None
+        return max(invoices, key=lambda row: (row["amount"], str(row.get("id", ""))))
 
     def _choose_cart_product(self, task: str, snapshot: BrowserSnapshot, expected: list[ExpectedCheck]) -> str:
         for check in expected:

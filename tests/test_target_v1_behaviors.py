@@ -47,3 +47,17 @@ def test_shopping_compare_cheapest_valid_item_saved_to_wishlist():
     assert "Compact USB-C Hub" in agent.state.wishlist
     assert "Compact USB-C Hub" not in agent.state.cart
     assert evaluate_expected(case, agent.state) is True
+
+
+def test_dashboard_table_largest_overdue_invoice_marked_for_review():
+    case = _case("dashboard_table_001")
+    agent = BrowserAgent()
+    result = agent.run_case(case)
+    assert result.status == "success"
+    assert result.verified is True
+
+    rows = {row["id"]: row for row in agent.state.dashboard_rows}
+    assert rows["inv_102"]["review"] is True
+    assert rows["inv_100"]["review"] is False
+    assert rows["inv_101"]["review"] is False
+    assert evaluate_expected(case, agent.state) is True
