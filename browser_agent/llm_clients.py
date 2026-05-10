@@ -48,8 +48,8 @@ class FakeLLMClient:
         instruction = payload.get("input", {}).get("user_instruction", "").lower()
         if "weekly summary emails" in instruction and any(word in instruction for word in ("turn on", "enable")):
             return {
-                "action_type": "select",
-                "target": "toggle:weekly-summary-emails",
+                "decision": "act",
+                "action_id": "settings:set_weekly_summary_emails:true",
                 "reason": "Enable the requested weekly summary emails setting.",
             }
         if "cheapest" in instruction and "usb-c hub" in instruction and "wishlist" in instruction:
@@ -78,6 +78,16 @@ class FakeLLMClient:
                         "action_id": action["action_id"],
                         "reason": "Review only Morgan Lee's pending reimbursement request.",
                     }
+        if "support ticket" in instruction and "alex@example.com" in instruction and "package arrived damaged" in instruction:
+            return {
+                "decision": "fill_and_submit",
+                "fields": {
+                    "support-email": "alex@example.com",
+                    "support-message": "The package arrived damaged.",
+                },
+                "submit_action_id": "support:submit_ticket",
+                "reason": "Fill the provided email and message, then submit the support ticket.",
+            }
         return {"action_type": "stop", "reason": "Fake LLM default stop."}
 
 

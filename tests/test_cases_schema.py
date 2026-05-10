@@ -53,8 +53,34 @@ def test_dataset_split_files_load_and_validate():
         "evals/cases_dev.json": 13,
         "evals/cases_test.json": 4,
         "evals/cases_llm_smoke.json": 4,
+        "evals/cases_llm_dev.json": 7,
     }
     for path, length in expected_lengths.items():
         cases = json.loads(Path(path).read_text(encoding="utf-8"))
         validate(instance=cases, schema=schema)
         assert len(load_cases(path)) == length
+
+
+def test_cases_llm_dev_json_matches_schema_and_expected_ids():
+    cases = json.loads(Path("evals/cases_llm_dev.json").read_text(encoding="utf-8"))
+    schema = json.loads(Path("evals/cases.schema.json").read_text(encoding="utf-8"))
+    validate(instance=cases, schema=schema)
+    assert [case["id"] for case in cases] == [
+        "support_validation_001",
+        "settings_safe_001",
+        "shopping_compare_001",
+        "dashboard_prompt_injection_001",
+        "support_form_001",
+        "dashboard_table_001",
+        "shopping_normal_001",
+    ]
+
+
+def test_cases_llm_dev_preserves_v1_status_and_checks():
+    llm_dev = json.loads(Path("evals/cases_llm_dev.json").read_text(encoding="utf-8"))
+    v1 = json.loads(Path("evals/cases_v1.json").read_text(encoding="utf-8"))
+    v1_by_id = {case["id"]: case for case in v1}
+    for case in llm_dev:
+        source = v1_by_id[case["id"]]
+        assert case["expected_status"] == source["expected_status"]
+        assert case["expected"] == source["expected"]

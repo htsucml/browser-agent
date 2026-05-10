@@ -42,14 +42,17 @@ Dataset split scaffolding:
 - `evals/cases_dev.json`: current Dataset v1 development set.
 - `evals/cases_test.json`: small placeholder copied subset for plumbing only. A true test split should be frozen and not tuned on.
 - `evals/cases_llm_smoke.json`: four-case LLM smoke suite.
+- `evals/cases_llm_dev.json`: seven-case LLM-ready development subset copied from Dataset v1.
 
 Compare planner configs with the ablation runner:
 
 ```bash
 python3 -m evals.run_ablation --cases evals/cases_llm_smoke.json --configs rule,llm_fake
+python3 -m evals.run_ablation --cases evals/cases_llm_dev.json --configs rule,llm_fake
+./scripts/ablate_llm_dev_fake.sh
 ```
 
-This writes `logs/ablation_report.json` and `logs/ablation_report.md`. The ablation runner does not run real OpenAI by default; add real-key configs manually later only for local experiments.
+This writes `logs/ablation_report.json` and `logs/ablation_report.md`. The ablation runner does not run real OpenAI by default.
 
 ## Planner Modes
 
@@ -69,6 +72,12 @@ PLANNER=llm LLM_PROVIDER=fake python3 -m evals.run_eval --cases evals/cases_llm_
 ./scripts/llm_smoke_fake.sh
 ./scripts/llm_smoke_suite_fake.sh
 ```
+
+Unified ablation config meanings:
+
+- `rule`: `PLANNER=rule`
+- `llm_fake`: `PLANNER=llm`, `LLM_PROVIDER=fake`
+- `llm_openai`: `PLANNER=llm`, `LLM_PROVIDER=openai`, strict caps, paid local run only
 
 Real OpenAI-compatible LLMPlanner is for local one-case experiments later. Do not deploy a public LLM key on Zeabur. This uses paid API credits.
 
@@ -96,6 +105,15 @@ OPENAI_API_KEY=... ./scripts/llm_smoke_suite_openai.sh
 ```
 
 The suite uses strict caps by default: `LLM_MODEL=gpt-4.1-nano`, `MAX_LLM_CALLS_PER_RUN=1`, `MAX_STEPS=3`, `MAX_OUTPUT_TOKENS=300`, and `REQUEST_TIMEOUT_SECONDS=30`. Run it locally only; do not put `OPENAI_API_KEY` on Zeabur yet.
+
+Paid local LLM ablation over the seven-case LLM dev subset:
+
+```bash
+OPENAI_API_KEY=... python3 -m evals.run_ablation --cases evals/cases_llm_dev.json --configs rule,llm_openai --allow-paid
+OPENAI_API_KEY=... ./scripts/ablate_llm_dev_openai.sh
+```
+
+`llm_openai` will be skipped unless `--allow-paid` is provided and `OPENAI_API_KEY` is set. The key is never printed by the runner or helper script.
 
 LLMPlanner receives only agent-visible task and observation data. Runtime verifiers and offline evaluators remain deterministic and do not use LLM-as-judge.
 

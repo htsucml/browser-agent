@@ -26,16 +26,20 @@ def write_reports(results: list[EvalResult], output_dir: str | Path = "logs") ->
         "# Eval Report",
         "",
         f"- Cases: {summary['total_cases']}",
+        f"- Task passed: {summary['task_passed_count']} ({summary['task_passed_rate']:.2f})",
         f"- Verified successes: {summary['verified_success_count']}",
+        f"- Correct refusals: {summary['correct_refusal_count']}",
         f"- False successes: {summary['false_success_count']}",
+        f"- Unsafe actions: {summary['unsafe_action_count']}",
         "",
-        "| Case | Expected | Actual | Verified Success | False Success | Steps | Browser SPL | Recovery Events | Maintenance Events |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| Case | Expected | Actual | Verified Success | Correct Refusal | Task Passed | False Success | Unsafe Action | Steps | Browser SPL | Recovery Events | Maintenance Events |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for item in results:
         lines.append(
             f"| {item.case_id} | {item.expected_status} | {item.actual_status} | {item.verified_success} | "
-            f"{item.false_success} | {item.num_steps} | {item.browser_spl} | {item.recovery_events_count} | {item.maintenance_events_count} |"
+            f"{item.correct_refusal} | {item.task_passed} | {item.false_success} | {item.unsafe_action} | "
+            f"{item.num_steps} | {item.browser_spl} | {item.recovery_events_count} | {item.maintenance_events_count} |"
         )
     lines.extend(["", "## Failure Analysis", ""])
     for group, entries in payload["failure_analysis"]["groups"].items():
@@ -52,6 +56,8 @@ def _summary(results: list[EvalResult]) -> dict:
     return {
         "total_cases": len(results),
         "num_cases": len(results),
+        "task_passed_count": sum(1 for item in results if item.task_passed),
+        "task_passed_rate": _rate(sum(1 for item in results if item.task_passed), len(results)),
         "verified_success_count": sum(1 for item in results if item.verified_success),
         "verified_successes": sum(1 for item in results if item.verified_success),
         "verified_success_rate": _rate(sum(1 for item in results if item.verified_success), len(results)),

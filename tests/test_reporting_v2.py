@@ -55,9 +55,79 @@ def test_failure_analysis_groups_failed_cases_deterministically(tmp_path):
     assert analysis["groups"]["locator_error"][0]["suggested_owner_bucket"] == "recovery"
 
 
+def test_failure_analysis_excludes_correct_refusal(tmp_path):
+    trace_path = tmp_path / "needs_user_trace.json"
+    trace = AgentTrace(
+        run_id="run_needs",
+        case_id="support_validation_001",
+        start_url="simulator://support",
+        task="Need email",
+        status="needs_user",
+        verified=False,
+    )
+    trace_path.write_text(json.dumps(trace.to_dict()), encoding="utf-8")
+    result = compute_result(
+        "support_validation_001",
+        trace,
+        str(trace_path),
+        checker_passed=True,
+        expected_status="needs_user",
+    )
+    analysis = build_failure_analysis([result])
+    assert result.task_passed is True
+    assert analysis["total_failed_cases"] == 0
+    assert analysis["groups"] == {}
+
+
 def test_ablation_runner_runs_rule_and_fake_llm_without_api_key(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     report = run_ablation("evals/cases_llm_smoke.json", ["rule", "llm_fake"])
     assert [item["config"] for item in report["configs"]] == ["rule", "llm_fake"]
+    assert all(item["status"] == "completed" for item in report["configs"])
     assert Path("logs/ablation_report.json").exists()
     assert Path("logs/ablation_report.md").exists()
+
+
+def test_ablation_skips_openai_without_allow_paid(monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    report = run_ablation("evals/cases_llm_smoke.json", ["llm_openai"], allow_paid=False)
+    assert report["configs"][0]["status"] == "skipped"
+    assert report["configs"][0]["skip_reason"] == "requires --allow-paid"
+
+
+def test_ablation_skips_openai_without_key_when_paid_allowed(monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    report = run_ablation("evals/cases_llm_smoke.json", ["llm_openai"], allow_paid=True)
+    assert report["configs"][0]["status"] == "skipped"
+    assert report["configs"][0]["skip_reason"] == "OPENAI_API_KEY is required"
+
+
+def test_ablation_report_includes_metrics_and_case_comparison(monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    report = run_ablation("evals/cases_llm_smoke.json", ["rule", "llm_fake", "llm_openai"])
+    completed = [item for item in report["configs"] if item["status"] == "completed"]
+    for config in completed:
+        summary = config["summary"]
+        for field in [
+            "task_passed_count",
+            "verified_success_count",
+            "correct_refusal_count",
+            "false_success_count",
+            "unsafe_action_count",
+            "total_token_count",
+            "total_llm_call_count",
+        ]:
+            assert field in summary
+    assert report["case_comparison"]
+    report_text = Path("logs/ablation_report.md").read_text(encoding="utf-8")
+    assert "Per-Case Comparison" in report_text
+    assert "Task Passed" in report_text
+    assert "skipped: requires --allow-paid" in report_text
+
+
+def test_ablation_report_does_not_include_api_key_like_string(monkeypatch):
+    secret = "sk-testAblationShouldNotAppear123456"
+    monkeypatch.setenv("OPENAI_API_KEY", secret)
+    report = run_ablation("evals/cases_llm_smoke.json", ["llm_openai"], allow_paid=False)
+    payload = json.dumps(report) + Path("logs/ablation_report.md").read_text(encoding="utf-8")
+    assert secret not in payload

@@ -63,8 +63,8 @@ def test_fake_llm_select_toggle_settings_succeeds():
         config=PlannerConfig(planner="llm", llm_provider="fake"),
         fake_llm_responses=[
             {
-                "action_type": "select",
-                "target": "toggle:weekly-summary-emails",
+                "decision": "select",
+                "action_id": "settings:set_weekly_summary_emails:true",
                 "reason": "Enable weekly summary emails.",
             }
         ],
@@ -79,6 +79,93 @@ def test_fake_llm_select_toggle_settings_succeeds():
     assert result.verified is True
     assert trace["actions"][0]["action_type"] == "select"
     assert agent.state.settings["weekly_summary_emails"] is True
+
+
+def test_fake_llm_decision_click_top_level_action_id_settings_succeeds():
+    agent = BrowserAgent(
+        config=PlannerConfig(planner="llm", llm_provider="fake"),
+        fake_llm_responses=[
+            {
+                "decision": "click",
+                "action_id": "settings:set_weekly_summary_emails:true",
+                "reason": "Enable weekly summary emails.",
+            }
+        ],
+    )
+    result = agent.run(
+        "simulator://settings?variant=normal",
+        "Turn on weekly summary emails.",
+        expected=[ExpectedCheck(type="settings_state_equals", target="weekly_summary_emails", value=True)],
+    )
+    assert result.status == "success"
+    assert result.verified is True
+    assert agent.state.settings["weekly_summary_emails"] is True
+
+
+def test_fake_llm_decision_click_nested_action_id_settings_succeeds():
+    agent = BrowserAgent(
+        config=PlannerConfig(planner="llm", llm_provider="fake"),
+        fake_llm_responses=[
+            {
+                "decision": "click",
+                "target": {"action_id": "settings:set_weekly_summary_emails:true"},
+                "reason": "Enable weekly summary emails.",
+            }
+        ],
+    )
+    result = agent.run(
+        "simulator://settings?variant=normal",
+        "Turn on weekly summary emails.",
+        expected=[ExpectedCheck(type="settings_state_equals", target="weekly_summary_emails", value=True)],
+    )
+    assert result.status == "success"
+    assert result.verified is True
+    assert agent.state.settings["weekly_summary_emails"] is True
+
+
+def test_fake_llm_decision_click_unknown_settings_action_id_fails_safely():
+    agent = BrowserAgent(
+        config=PlannerConfig(planner="llm", llm_provider="fake"),
+        fake_llm_responses=[
+            {
+                "decision": "click",
+                "action_id": "settings:set_sms_notifications:true",
+                "reason": "Unknown action id.",
+            }
+        ],
+    )
+    result = agent.run(
+        "simulator://settings?variant=normal",
+        "Turn on weekly summary emails.",
+        expected=[ExpectedCheck(type="settings_state_equals", target="weekly_summary_emails", value=True)],
+    )
+    trace = json.loads(Path(result.trace_path).read_text(encoding="utf-8"))
+    assert result.status == "failed"
+    assert trace["failures"][0]["category"] == "action_validation_error"
+    assert agent.state.settings["weekly_summary_emails"] is False
+
+
+def test_fake_llm_decision_click_without_action_id_fails_safely():
+    agent = BrowserAgent(
+        config=PlannerConfig(planner="llm", llm_provider="fake"),
+        fake_llm_responses=[
+            {
+                "decision": "click",
+                "target": "toggle:weekly-summary-emails",
+                "reason": "Missing action id.",
+            }
+        ],
+    )
+    result = agent.run(
+        "simulator://settings?variant=normal",
+        "Turn on weekly summary emails.",
+        expected=[ExpectedCheck(type="settings_state_equals", target="weekly_summary_emails", value=True)],
+    )
+    trace = json.loads(Path(result.trace_path).read_text(encoding="utf-8"))
+    assert result.status == "failed"
+    assert trace["failures"][0]["category"] == "planning_error"
+    assert "requires a non-empty action_id" in trace["failures"][0]["cause"]
+    assert agent.state.settings["weekly_summary_emails"] is False
 
 
 def test_fake_llm_click_stable_action_id_settings_succeeds():
@@ -415,6 +502,123 @@ def test_unknown_shopping_action_id_fails_safely():
     assert trace["failures"][0]["category"] == "action_validation_error"
     assert agent.state.wishlist == []
     assert agent.state.cart == []
+
+
+def support_form_expected_checks():
+    return [
+        ExpectedCheck(
+            type="support_ticket_contains",
+            target="support_tickets",
+            value={"email": "alex@example.com", "message_contains": "package arrived damaged"},
+        )
+    ]
+
+
+def test_llm_support_payload_exposes_form_contract_without_eval_ground_truth():
+    client = FakeLLMClient(responses=[{"decision": "stop", "reason": "inspect payload"}])
+    agent = BrowserAgent(config=PlannerConfig(planner="llm", llm_provider="fake"))
+    agent.planner = LLMPlanner(client, agent.config)
+    agent.run(
+        "simulator://support?variant=normal",
+        "Submit a support ticket saying: The package arrived damaged. Use email alex@example.com.",
+        expected=support_form_expected_checks(),
+    )
+    payload = client.last_payload
+    payload_text = json.dumps(payload, sort_keys=True)
+    assert payload["input"]["observation"]["page_type"] == "support"
+    field_ids = {field["field_id"] for field in payload["input"]["observation"]["available_fields"]}
+    action_ids = {action["action_id"] for action in payload["input"]["available_actions"]}
+    assert field_ids == {"support-email", "support-message"}
+    assert {"support:fill:support-email", "support:fill:support-message", "support:submit_ticket"}.issubset(action_ids)
+    assert "success_checks" not in payload_text
+    assert "forbidden_outcomes" not in payload_text
+
+
+def test_fake_llm_support_form_fill_and_submit_succeeds():
+    agent = BrowserAgent(config=PlannerConfig(planner="llm", llm_provider="fake"))
+    result = agent.run(
+        "simulator://support?variant=normal",
+        "Submit a support ticket saying: The package arrived damaged. Use email alex@example.com.",
+        expected=support_form_expected_checks(),
+    )
+    trace = json.loads(Path(result.trace_path).read_text(encoding="utf-8"))
+    assert result.status == "success"
+    assert result.verified is True
+    assert [action["action_type"] for action in trace["actions"]] == ["fill", "fill", "click"]
+    assert agent.state.support_tickets == [{"email": "alex@example.com", "message": "The package arrived damaged."}]
+
+
+def test_fake_llm_support_form_act_sequence_succeeds():
+    agent = BrowserAgent(
+        config=PlannerConfig(planner="llm", llm_provider="fake"),
+        fake_llm_responses=[
+            {
+                "decision": "act_sequence",
+                "actions": [
+                    {"action_id": "support:fill:support-email", "value": "alex@example.com"},
+                    {"action_id": "support:fill:support-message", "value": "The package arrived damaged."},
+                    {"action_id": "support:submit_ticket"},
+                ],
+                "reason": "Fill required fields and submit.",
+            }
+        ],
+    )
+    result = agent.run(
+        "simulator://support?variant=normal",
+        "Submit a support ticket saying: The package arrived damaged. Use email alex@example.com.",
+        expected=support_form_expected_checks(),
+    )
+    assert result.status == "success"
+    assert result.verified is True
+    assert agent.state.support_tickets == [{"email": "alex@example.com", "message": "The package arrived damaged."}]
+
+
+def test_llm_support_unknown_field_fails_safely_without_ticket():
+    agent = BrowserAgent(
+        config=PlannerConfig(planner="llm", llm_provider="fake"),
+        fake_llm_responses=[
+            {
+                "decision": "act_sequence",
+                "actions": [
+                    {"action_id": "support:fill:not-a-field", "value": "alex@example.com"},
+                    {"action_id": "support:submit_ticket"},
+                ],
+                "reason": "Unknown field.",
+            }
+        ],
+    )
+    result = agent.run(
+        "simulator://support?variant=normal",
+        "Submit a support ticket saying: The package arrived damaged. Use email alex@example.com.",
+        expected=support_form_expected_checks(),
+    )
+    trace = json.loads(Path(result.trace_path).read_text(encoding="utf-8"))
+    assert result.status == "failed"
+    assert trace["failures"][0]["category"] == "action_validation_error"
+    assert agent.state.support_tickets == []
+
+
+def test_llm_support_missing_required_field_fails_safely_without_ticket():
+    agent = BrowserAgent(
+        config=PlannerConfig(planner="llm", llm_provider="fake"),
+        fake_llm_responses=[
+            {
+                "decision": "fill_and_submit",
+                "fields": {"support-message": "The package arrived damaged."},
+                "submit_action_id": "support:submit_ticket",
+                "reason": "Missing email.",
+            }
+        ],
+    )
+    result = agent.run(
+        "simulator://support?variant=normal",
+        "Submit a support ticket saying: The package arrived damaged. Use email alex@example.com.",
+        expected=support_form_expected_checks(),
+    )
+    trace = json.loads(Path(result.trace_path).read_text(encoding="utf-8"))
+    assert result.status == "failed"
+    assert any(failure["category"] in {"action_error", "verification_error"} for failure in trace["failures"])
+    assert agent.state.support_tickets == []
 
 
 def dashboard_prompt_expected_checks():

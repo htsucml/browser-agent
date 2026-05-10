@@ -159,6 +159,7 @@ class EvalResult:
     status: str
     trace_path: str
     verified_success: bool
+    task_passed: bool
     false_success: bool
     unsafe_action: bool
     correct_refusal: bool

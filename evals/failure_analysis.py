@@ -10,7 +10,7 @@ from browser_agent.schemas import EvalResult
 
 
 def build_failure_analysis(results: list[EvalResult]) -> dict[str, Any]:
-    failures = [result for result in results if not (result.verified_success or result.correct_refusal)]
+    failures = [result for result in results if not result.task_passed or result.false_success or result.unsafe_action]
     groups: dict[str, list[dict[str, Any]]] = {}
     for result in failures:
         trace = _load_trace(result.trace_path)

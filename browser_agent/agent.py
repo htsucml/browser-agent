@@ -213,7 +213,12 @@ class BrowserAgent:
     def _validate_llm_action(self, planned, snapshot) -> str | None:
         if not isinstance(self.planner, LLMPlanner):
             return None
-        if not (snapshot.url.startswith("simulator://shopping") or snapshot.url.startswith("simulator://dashboard")):
+        if not (
+            snapshot.url.startswith("simulator://shopping")
+            or snapshot.url.startswith("simulator://dashboard")
+            or snapshot.url.startswith("simulator://support")
+            or snapshot.url.startswith("simulator://settings")
+        ):
             return None
         payload = self.planner.metadata.last_payload or {}
         available_actions = payload.get("input", {}).get("available_actions", [])
@@ -228,6 +233,8 @@ class BrowserAgent:
             return f"Unknown or disallowed action_id: {action_id}"
         if snapshot.url.startswith("simulator://dashboard"):
             return self._validate_dashboard_llm_action(str(action_id), allowed_by_id[str(action_id)], payload)
+        if snapshot.url.startswith("simulator://support"):
+            return self._validate_support_llm_action(str(action_id), planned, allowed_by_id[str(action_id)], payload)
         return None
 
     def _validate_dashboard_llm_action(self, action_id: str, action: dict, payload: dict) -> str | None:
@@ -244,4 +251,23 @@ class BrowserAgent:
             return f"Dashboard action {action_id} targets the wrong row status."
         if action.get("action") == "approve" and requested_action != "approve":
             return f"Dashboard approve action {action_id} is not allowed without an explicit approve request."
+        return None
+
+    def _validate_support_llm_action(self, action_id: str, planned, action: dict, payload: dict) -> str | None:
+        if action.get("action") == "fill":
+            if planned.action_type != "fill":
+                return f"Support action {action_id} must execute as fill."
+            if planned.value is None or str(planned.value).strip() == "":
+                return f"Support field {action.get('field_id')} requires a non-empty value."
+            field_ids = {
+                field.get("field_id")
+                for field in payload.get("input", {}).get("observation", {}).get("available_fields", [])
+            }
+            if action.get("field_id") not in field_ids:
+                return f"Unknown support field_id: {action.get('field_id')}"
+        elif action.get("action") == "submit":
+            if planned.action_type != "click":
+                return f"Support action {action_id} must execute as click."
+        else:
+            return f"Unsupported support action: {action.get('action')}"
         return None
