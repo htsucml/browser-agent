@@ -129,15 +129,6 @@ def _run_once(
     if request_key and not app_config.allow_byok:
         raise HTTPException(status_code=403, detail="BYOK is disabled on this deployment.")
 
-    if start_url.startswith(("http://", "https://")):
-        _validate_public_http_url(start_url)
-        result = run_readonly(start_url, task, max_extract_chars=app_config.max_extract_chars)
-        trace = json.loads(Path(result["trace_path"]).read_text(encoding="utf-8"))
-        return result, trace
-
-    if not start_url.startswith("simulator://"):
-        raise HTTPException(status_code=400, detail="Only simulator:// or public http(s) URLs are supported.")
-
     config = PlannerConfig(
         planner=planner,
         llm_provider=llm_provider,
@@ -155,6 +146,21 @@ def _run_once(
             llm_api_key = _USE_ENV_API_KEY
         else:
             llm_api_key = None
+
+    if start_url.startswith(("http://", "https://")):
+        _validate_public_http_url(start_url)
+        result = run_readonly(
+            start_url,
+            task,
+            max_extract_chars=app_config.max_extract_chars,
+            config=config,
+            llm_api_key=llm_api_key,
+        )
+        trace = json.loads(Path(result["trace_path"]).read_text(encoding="utf-8"))
+        return result, trace
+
+    if not start_url.startswith("simulator://"):
+        raise HTTPException(status_code=400, detail="Only simulator:// or public http(s) URLs are supported.")
 
     result = BrowserAgent(config=config, llm_api_key=llm_api_key).run(start_url=start_url, task=task, max_steps=config.max_steps)
     trace = json.loads(Path(result.trace_path).read_text(encoding="utf-8"))

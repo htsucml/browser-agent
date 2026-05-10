@@ -119,7 +119,7 @@ LLMPlanner receives only agent-visible task and observation data. Runtime verifi
 
 ## BYOK Demo Mode
 
-The web app supports bring-your-own-key OpenAI runs for simulator tasks. BYOK is disabled by default and a submitted key is used only for that one request. The app does not store keys in traces, logs, cookies, localStorage, files, or app state, and key-like strings are redacted from trace errors.
+The web app supports bring-your-own-key OpenAI runs for simulator tasks and read-only online summarization. BYOK is disabled by default and a submitted key is used only for that one request. The app does not store keys in traces, logs, cookies, localStorage, files, or app state, and key-like strings are redacted from trace errors.
 
 Local BYOK app test:
 
@@ -136,7 +136,7 @@ MAX_EXTRACT_CHARS=10000 \
 python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-Then open `http://127.0.0.1:8000`, select `llm` and `openai`, enter the demo token and your OpenAI key in the password fields, and run one of the simulator smoke tasks.
+Then open `http://127.0.0.1:8000`, select `llm` and `openai`, enter the demo token and your OpenAI key in the password fields, and run one simulator smoke task or one read-only `https://` URL.
 
 For public Zeabur demos, prefer BYOK and do not configure a server-side `OPENAI_API_KEY`. Recommended Zeabur environment variables:
 
@@ -162,7 +162,7 @@ python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 Open `http://127.0.0.1:8000`.
 
-The web app keeps simulator tasks as the default. For `http://` or `https://` URLs, it uses the read-only Playwright backend and reports page title/text evidence without clicking or filling forms.
+The web app keeps simulator tasks as the default. For `http://` or `https://` URLs, it uses the read-only Playwright backend and reports page title/text evidence without clicking, filling forms, or navigating beyond the initial page load. If planner mode is `llm`, it can optionally answer or summarize the task from the extracted evidence.
 
 ## Read-Only Online Smoke
 
@@ -174,7 +174,26 @@ python3 -m playwright install --with-deps chromium
 python3 -m browser_agent.run_readonly --url https://example.com --task "Return the page title and main visible text."
 ```
 
-The read-only runner writes a trace to `logs/runs/` and reports success only when a page title or non-empty visible text is extracted.
+Fake LLM summarization, with no external API call:
+
+```bash
+PLANNER=llm LLM_PROVIDER=fake python3 -m browser_agent.run_readonly --url https://example.com --task "Summarize this page from the extracted evidence."
+```
+
+Local OpenAI/BYOK-style summarization:
+
+```bash
+PLANNER=llm \
+LLM_PROVIDER=openai \
+OPENAI_API_KEY=... \
+MAX_LLM_CALLS_PER_RUN=1 \
+MAX_OUTPUT_TOKENS=300 \
+REQUEST_TIMEOUT_SECONDS=30 \
+MAX_EXTRACT_CHARS=10000 \
+python3 -m browser_agent.run_readonly --url https://example.com --task "Summarize this page from the extracted evidence."
+```
+
+The read-only runner writes a trace to `logs/runs/` and reports success only when a page title or non-empty visible text is extracted. Optional LLM summarization receives only the extracted URL, title, headings, visible text, and links count. It does not click, fill forms, or use LLM-as-judge.
 
 ## Docker
 

@@ -88,6 +88,11 @@ class FakeLLMClient:
                 "submit_action_id": "support:submit_ticket",
                 "reason": "Fill the provided email and message, then submit the support ticket.",
             }
+        if payload.get("input", {}).get("mode") == "read_only_summarization":
+            return {
+                "answer": "Fake summary based on extracted page content.",
+                "reason": "Deterministic fake read-only summary.",
+            }
         return {"action_type": "stop", "reason": "Fake LLM default stop."}
 
 

@@ -13,6 +13,9 @@ class AgentDisplayResult:
     status: str
     verified: bool
     user_message: str
+    answer: str | None
+    source_url: str | None
+    page_title: str | None
     evidence_summary: str
     actions_summary: list[str]
     safety_summary: str
@@ -29,8 +32,11 @@ def build_display_result(trace: AgentTrace | dict[str, Any], trace_path: str = "
     verified = bool(data.get("verified", False))
     final_evidence = data.get("final_evidence", {}) or {}
     reason = str(final_evidence.get("reason") or "")
+    answer = final_evidence.get("llm_answer")
+    source_url = final_evidence.get("url")
+    page_title = final_evidence.get("title")
     if status == "success" and verified:
-        user_message = "Task completed and verified."
+        user_message = "Read-only answer generated from page evidence." if answer else "Task completed and verified."
     elif status == "needs_user":
         user_message = "More information or confirmation is needed."
     elif status == "refused":
@@ -44,6 +50,9 @@ def build_display_result(trace: AgentTrace | dict[str, Any], trace_path: str = "
         status=status,
         verified=verified,
         user_message=user_message,
+        answer=str(answer) if answer is not None else None,
+        source_url=str(source_url) if source_url is not None else None,
+        page_title=str(page_title) if page_title is not None else None,
         evidence_summary=reason or _summarize_evidence(final_evidence),
         actions_summary=[_summarize_action(action) for action in actions],
         safety_summary=_summarize_safety(safety_events),

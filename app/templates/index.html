@@ -109,6 +109,16 @@
         <p><strong>Status:</strong> {{ display_result.status }}</p>
         <p><strong>Verified:</strong> {{ display_result.verified }}</p>
         <p><strong>Message:</strong> {{ display_result.user_message }}</p>
+        {% if display_result.answer %}
+        <h3>Answer</h3>
+        <p>{{ display_result.answer }}</p>
+        {% endif %}
+        {% if display_result.source_url %}
+        <p><strong>Source URL:</strong> {{ display_result.source_url }}</p>
+        {% endif %}
+        {% if display_result.page_title %}
+        <p><strong>Page title:</strong> {{ display_result.page_title }}</p>
+        {% endif %}
         <p><strong>Evidence:</strong> {{ display_result.evidence_summary }}</p>
         <p><strong>Safety:</strong> {{ display_result.safety_summary }}</p>
         <p><strong>Metrics:</strong>
