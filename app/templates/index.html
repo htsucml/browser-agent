@@ -111,7 +111,18 @@
         <p><strong>Message:</strong> {{ display_result.user_message }}</p>
         {% if display_result.answer %}
         <h3>Answer</h3>
+        {% if display_result.answer_lines %}
+        <ul>
+          {% for item in display_result.answer_lines %}
+          <li>{{ item }}</li>
+          {% endfor %}
+        </ul>
+        {% else %}
         <p>{{ display_result.answer }}</p>
+        {% endif %}
+        {% if display_result.answer_warning %}
+        <p class="notice">{{ display_result.answer_warning }}</p>
+        {% endif %}
         {% endif %}
         {% if display_result.source_url %}
         <p><strong>Source URL:</strong> {{ display_result.source_url }}</p>

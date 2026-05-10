@@ -36,6 +36,72 @@ def test_display_result_for_needs_user():
     assert display.evidence_summary == "Email is required."
 
 
+def test_display_result_formats_list_answer_as_lines():
+    trace = AgentTrace(
+        run_id="readonly_list_answer",
+        case_id=None,
+        start_url="https://example.com",
+        task="Summarize",
+        status="success",
+        verified=True,
+        final_evidence={
+            "reason": "Page loaded.",
+            "url": "https://example.com",
+            "title": "Example",
+            "llm_answer": ["- First point", "- Second point"],
+        },
+    )
+
+    display = build_display_result(trace, "trace.json")
+
+    assert display.answer_lines == ["- First point", "- Second point"]
+    assert display.answer == "- First point\n- Second point"
+
+
+def test_display_result_formats_serialized_list_answer_as_lines():
+    trace = AgentTrace(
+        run_id="readonly_serialized_list_answer",
+        case_id=None,
+        start_url="https://example.com",
+        task="Summarize",
+        status="success",
+        verified=True,
+        final_evidence={
+            "reason": "Page loaded.",
+            "url": "https://example.com",
+            "title": "Example",
+            "llm_answer": "['- Alpha', '- Beta']",
+        },
+    )
+
+    display = build_display_result(trace, "trace.json")
+
+    assert display.answer_lines == ["- Alpha", "- Beta"]
+    assert display.answer == "- Alpha\n- Beta"
+
+
+def test_display_result_formats_markdown_bullets_as_lines():
+    trace = AgentTrace(
+        run_id="readonly_markdown_bullets",
+        case_id=None,
+        start_url="https://example.com",
+        task="Summarize",
+        status="success",
+        verified=True,
+        final_evidence={
+            "reason": "Page loaded.",
+            "url": "https://example.com",
+            "title": "Example",
+            "llm_answer": "- First complete point.\n- Second complete point.",
+        },
+    )
+
+    display = build_display_result(trace, "trace.json")
+
+    assert display.answer_lines == ["- First complete point.", "- Second complete point."]
+    assert display.answer == "- First complete point.\n- Second complete point."
+
+
 def test_failure_analysis_groups_failed_cases_deterministically(tmp_path):
     trace_path = tmp_path / "trace.json"
     trace = AgentTrace(

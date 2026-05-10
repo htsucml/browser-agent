@@ -66,6 +66,9 @@ def run_readonly(
         }
         if llm_answer is not None:
             trace.final_evidence["llm_answer"] = llm_answer
+            trace.final_evidence["answer_quality"] = llm_response.get("answer_quality", "complete")
+            if trace.final_evidence["answer_quality"] == "incomplete":
+                trace.final_evidence["answer_warning"] = "LLM answer looked incomplete; extracted page evidence is still available."
     except Exception as exc:
         trace.status = "failed"
         trace.verified = False
@@ -101,9 +104,10 @@ def _summarize_with_llm(
     client = make_llm_client(config.llm_provider, config.llm_model, api_key=api_key)
     payload = {
         "system_prompt": (
-            "You answer read-only browser tasks from extracted page evidence. "
-            "Do not claim to click, fill forms, navigate, or verify anything beyond the provided evidence. "
-            "Return only valid JSON with an answer field."
+            "You answer read-only browser tasks using only extracted page evidence. "
+            "Return plain Markdown text only, with no JSON and no code fences. "
+            "If the user asks for bullets, return complete bullet lines. "
+            "Do not claim to click, fill forms, navigate, or verify anything beyond the provided evidence."
         ),
         "input": {
             "mode": "read_only_summarization",
@@ -117,23 +121,52 @@ def _summarize_with_llm(
             },
         },
     }
-    response = client.generate_json(
+    response = client.generate_text(
         payload,
         max_output_tokens=config.max_output_tokens,
         timeout_seconds=config.request_timeout_seconds,
     )
-    try:
-        data = json.loads(response.content)
-    except json.JSONDecodeError:
-        data = {"answer": response.content}
-    answer = str(data.get("answer") or data.get("summary") or data.get("result") or "")
+    answer = _extract_answer_text(response.content)
+    quality = _answer_quality(answer)
     return {
         "answer": answer,
+        "answer_quality": quality,
         "model": response.model,
         "prompt_tokens": response.prompt_tokens,
         "completion_tokens": response.completion_tokens,
         "total_tokens": response.total_tokens,
     }
+
+
+def _extract_answer_text(content: str) -> str:
+    text = content.strip()
+    if text.startswith("{") and text.endswith("}"):
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            return text
+        if isinstance(data, dict):
+            answer = data.get("answer") or data.get("summary") or data.get("result")
+            if answer is not None:
+                return _stringify_answer(answer)
+    return text
+
+
+def _stringify_answer(answer: Any) -> str:
+    if isinstance(answer, list):
+        return "\n".join(str(item).strip() for item in answer if str(item).strip())
+    return str(answer).strip()
+
+
+def _answer_quality(answer: str) -> str:
+    stripped = answer.strip()
+    if not stripped:
+        return "incomplete"
+    if len(stripped) < 24:
+        return "incomplete"
+    if "\n" not in stripped and stripped[-1] not in ".!?:;)]}\"'":
+        return "incomplete"
+    return "complete"
 
 
 def main() -> None:

@@ -26,6 +26,9 @@ class LLMClient(Protocol):
     def generate_json(self, payload: dict[str, Any], max_output_tokens: int, timeout_seconds: float) -> LLMResponse:
         """Return a JSON string response."""
 
+    def generate_text(self, payload: dict[str, Any], max_output_tokens: int, timeout_seconds: float) -> LLMResponse:
+        """Return a plain text response."""
+
 
 @dataclass
 class FakeLLMClient:
@@ -42,6 +45,13 @@ class FakeLLMClient:
         self.last_payload = payload
         response = self.responses.pop(0) if self.responses else self._default_response(payload)
         content = response if isinstance(response, str) else json.dumps(response)
+        return LLMResponse(content=content, model=self.model, prompt_tokens=0, completion_tokens=0, total_tokens=0)
+
+    def generate_text(self, payload: dict[str, Any], max_output_tokens: int, timeout_seconds: float) -> LLMResponse:
+        self.call_count += 1
+        self.last_payload = payload
+        response = self.responses.pop(0) if self.responses else self._default_response(payload)
+        content = response if isinstance(response, str) else str(response.get("answer", json.dumps(response)))
         return LLMResponse(content=content, model=self.model, prompt_tokens=0, completion_tokens=0, total_tokens=0)
 
     def _default_response(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -89,10 +99,7 @@ class FakeLLMClient:
                 "reason": "Fill the provided email and message, then submit the support ticket.",
             }
         if payload.get("input", {}).get("mode") == "read_only_summarization":
-            return {
-                "answer": "Fake summary based on extracted page content.",
-                "reason": "Deterministic fake read-only summary.",
-            }
+            return "- Fake summary based on extracted page content.\n- No external LLM call was made."
         return {"action_type": "stop", "reason": "Fake LLM default stop."}
 
 
@@ -119,6 +126,39 @@ class OpenAICompatibleLLMClient:
                 {"role": "user", "content": json.dumps(payload["input"], sort_keys=True)},
             ],
             "response_format": {"type": "json_object"},
+            "max_tokens": max_output_tokens,
+        }
+        request = urllib.request.Request(
+            "https://api.openai.com/v1/chat/completions",
+            data=json.dumps(body).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {self._api_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:  # pragma: no cover - external API
+            data = json.loads(response.read().decode("utf-8"))
+        message = data["choices"][0]["message"]["content"]
+        usage = data.get("usage", {})
+        return LLMResponse(
+            content=message,
+            model=self.model,
+            prompt_tokens=int(usage.get("prompt_tokens", 0)),
+            completion_tokens=int(usage.get("completion_tokens", 0)),
+            total_tokens=int(usage.get("total_tokens", 0)),
+        )
+
+    def generate_text(self, payload: dict[str, Any], max_output_tokens: int, timeout_seconds: float) -> LLMResponse:
+        if not self._api_key:
+            raise RuntimeError("OPENAI_API_KEY is required when PLANNER=llm and LLM_PROVIDER=openai.")
+
+        body = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": payload["system_prompt"]},
+                {"role": "user", "content": json.dumps(payload["input"], sort_keys=True)},
+            ],
             "max_tokens": max_output_tokens,
         }
         request = urllib.request.Request(
