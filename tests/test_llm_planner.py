@@ -58,6 +58,52 @@ def test_fake_llm_structured_click_action_parses_and_executes():
     assert trace["llm_call_count"] == 1
 
 
+def test_fake_llm_select_toggle_settings_succeeds():
+    agent = BrowserAgent(
+        config=PlannerConfig(planner="llm", llm_provider="fake"),
+        fake_llm_responses=[
+            {
+                "action_type": "select",
+                "target": "toggle:weekly-summary-emails",
+                "reason": "Enable weekly summary emails.",
+            }
+        ],
+    )
+    result = agent.run(
+        "simulator://settings?variant=normal",
+        "Turn on weekly summary emails.",
+        expected=[ExpectedCheck(type="settings_state_equals", target="weekly_summary_emails", value=True)],
+    )
+    trace = json.loads(Path(result.trace_path).read_text(encoding="utf-8"))
+    assert result.status == "success"
+    assert result.verified is True
+    assert trace["actions"][0]["action_type"] == "select"
+    assert agent.state.settings["weekly_summary_emails"] is True
+
+
+def test_fake_llm_click_stable_action_id_settings_succeeds():
+    agent = BrowserAgent(
+        config=PlannerConfig(planner="llm", llm_provider="fake"),
+        fake_llm_responses=[
+            {
+                "action_type": "click",
+                "target": {"action_id": "settings:set_weekly_summary_emails:true"},
+                "reason": "Enable weekly summary emails.",
+            }
+        ],
+    )
+    result = agent.run(
+        "simulator://settings?variant=normal",
+        "Turn on weekly summary emails.",
+        expected=[ExpectedCheck(type="settings_state_equals", target="weekly_summary_emails", value=True)],
+    )
+    trace = json.loads(Path(result.trace_path).read_text(encoding="utf-8"))
+    assert result.status == "success"
+    assert result.verified is True
+    assert trace["actions"][0]["target"] == "toggle:weekly-summary-emails"
+    assert agent.state.settings["weekly_summary_emails"] is True
+
+
 def test_invalid_json_from_fake_llm_is_controlled_failure():
     agent = BrowserAgent(
         config=PlannerConfig(planner="llm", llm_provider="fake"),

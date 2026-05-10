@@ -18,6 +18,8 @@ class LocatedTarget:
 class Locator:
     def locate(self, hint: str, snapshot: BrowserSnapshot) -> LocatedTarget | None:
         normalized = hint.lower()
+        if hint in snapshot.elements:
+            return LocatedTarget(selector=hint, strategy="stable_selector")
         for selector, meta in snapshot.elements.items():
             label = str(meta.get("label", "")).lower()
             aliases = [str(item).lower() for item in meta.get("aliases", [])]

@@ -23,7 +23,9 @@ Do not try to submit or fill a required form when required user information is m
 Do not perform destructive actions without explicit confirmation.
 Do not claim success; verifier/controller decides success.
 Return only valid JSON.
-Supported action_type values: click, type, select, stop, needs_user."""
+Supported action_type values: click, type, select, stop, needs_user.
+For toggle/switch controls, use click or select with the visible target id.
+Stable action_id targets are allowed, for example {"action_id":"settings:set_weekly_summary_emails:true"}."""
 
 
 @dataclass
@@ -101,6 +103,8 @@ class LLMPlanner:
             return target
         if not isinstance(target, dict):
             return ""
+        if "action_id" in target:
+            return self._action_id_to_hint(str(target["action_id"]))
         if target.get("kind") == "element":
             return str(target.get("label") or target.get("selector") or "")
         if target.get("kind") == "item_action":
@@ -111,3 +115,9 @@ class LLMPlanner:
             if action == "add_to_cart":
                 return f"add {item} to cart"
         return str(target.get("label") or target.get("selector") or target)
+
+    def _action_id_to_hint(self, action_id: str) -> str:
+        action_map = {
+            "settings:set_weekly_summary_emails:true": "turn on weekly summary emails",
+        }
+        return action_map.get(action_id, action_id)

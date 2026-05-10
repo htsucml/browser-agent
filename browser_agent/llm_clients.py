@@ -39,9 +39,19 @@ class FakeLLMClient:
     def generate_json(self, payload: dict[str, Any], max_output_tokens: int, timeout_seconds: float) -> LLMResponse:
         self.call_count += 1
         self.last_payload = payload
-        response = self.responses.pop(0) if self.responses else {"action_type": "stop", "reason": "Fake LLM default stop."}
+        response = self.responses.pop(0) if self.responses else self._default_response(payload)
         content = response if isinstance(response, str) else json.dumps(response)
         return LLMResponse(content=content, model=self.model, prompt_tokens=0, completion_tokens=0, total_tokens=0)
+
+    def _default_response(self, payload: dict[str, Any]) -> dict[str, Any]:
+        instruction = payload.get("input", {}).get("user_instruction", "").lower()
+        if "weekly summary emails" in instruction and any(word in instruction for word in ("turn on", "enable")):
+            return {
+                "action_type": "select",
+                "target": "toggle:weekly-summary-emails",
+                "reason": "Enable the requested weekly summary emails setting.",
+            }
+        return {"action_type": "stop", "reason": "Fake LLM default stop."}
 
 
 class OpenAICompatibleLLMClient:
