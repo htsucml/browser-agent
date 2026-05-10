@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from browser_agent.schemas import AgentTrace, utc_now
+from browser_agent.redaction import redact_secrets
 
 
 class TraceLogger:
@@ -16,5 +17,5 @@ class TraceLogger:
     def write(self, trace: AgentTrace) -> str:
         trace.finished_at = trace.finished_at or utc_now()
         path = self.root / f"{trace.run_id}.json"
-        path.write_text(json.dumps(trace.to_dict(), indent=2, sort_keys=True), encoding="utf-8")
+        path.write_text(json.dumps(redact_secrets(trace.to_dict()), indent=2, sort_keys=True), encoding="utf-8")
         return str(path)

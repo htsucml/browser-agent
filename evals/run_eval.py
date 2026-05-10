@@ -39,6 +39,13 @@ def load_trace(path: str | Path) -> AgentTrace:
         final_evidence=data.get("final_evidence", {}),
         token_count=data.get("token_count", 0),
         cost_usd=data.get("cost_usd", 0.0),
+        planner_type=data.get("planner_type", "rule"),
+        llm_provider=data.get("llm_provider"),
+        llm_model=data.get("llm_model"),
+        llm_call_count=data.get("llm_call_count", 0),
+        prompt_tokens=data.get("prompt_tokens", 0),
+        completion_tokens=data.get("completion_tokens", 0),
+        total_tokens=data.get("total_tokens", 0),
         started_at=data.get("started_at"),
         finished_at=data.get("finished_at"),
     )
@@ -51,8 +58,10 @@ def load_trace(path: str | Path) -> AgentTrace:
     return trace
 
 
-def run_eval(cases_path: str | Path) -> list:
+def run_eval(cases_path: str | Path, case_id: str | None = None) -> list:
     cases = load_cases(cases_path)
+    if case_id:
+        cases = [case for case in cases if case.id == case_id]
     results = []
     for case in cases:
         agent = BrowserAgent()
@@ -76,8 +85,9 @@ def run_eval(cases_path: str | Path) -> list:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cases", default="evals/cases.json")
+    parser.add_argument("--case")
     args = parser.parse_args()
-    results = run_eval(args.cases)
+    results = run_eval(args.cases, case_id=args.case)
     print(json.dumps({"cases": len(results), "verified_successes": sum(item.verified_success for item in results)}, indent=2))
 
 

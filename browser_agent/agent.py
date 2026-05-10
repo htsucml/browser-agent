@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from browser_agent.browser import SimulatorBrowser
+from browser_agent.config import PlannerConfig
 from browser_agent.controller import Controller
+from browser_agent.llm_clients import make_llm_client
+from browser_agent.llm_planner import LLMPlanner
 from browser_agent.locator import Locator
 from browser_agent.logger import TraceLogger
 from browser_agent.observer import Observer
@@ -19,22 +22,36 @@ from browser_agent.schemas import (
     ExpectedCheck,
     new_id,
 )
+from browser_agent.redaction import redact_secrets
 from browser_agent.verifier import Verifier
 from simulator.state import SimulatorState
 
 
 class BrowserAgent:
-    def __init__(self, state: SimulatorState | None = None, logger: TraceLogger | None = None):
+    def __init__(
+        self,
+        state: SimulatorState | None = None,
+        logger: TraceLogger | None = None,
+        config: PlannerConfig | None = None,
+        fake_llm_responses: list | None = None,
+    ):
         self.state = state or SimulatorState()
         self.browser = SimulatorBrowser(self.state)
         self.observer = Observer()
-        self.planner = RulePlanner()
+        self.config = config or PlannerConfig.from_env()
+        self.planner = self._make_planner(fake_llm_responses)
         self.locator = Locator()
         self.controller = Controller()
         self.verifier = Verifier()
         self.recovery = Recovery()
         self.safety = SafetyPolicy()
         self.logger = logger or TraceLogger()
+
+    def _make_planner(self, fake_llm_responses: list | None = None):
+        if self.config.planner == "llm":
+            client = make_llm_client(self.config.llm_provider, self.config.llm_model, fake_llm_responses)
+            return LLMPlanner(client, self.config)
+        return RulePlanner()
 
     def run(
         self,
@@ -46,7 +63,9 @@ class BrowserAgent:
     ) -> AgentRunResult:
         run_id = new_id("run")
         self.browser.reset(start_url)
+        max_steps = min(max_steps, self.config.max_steps)
         trace = AgentTrace(run_id=run_id, case_id=case_id, start_url=start_url, task=task, status="failed", verified=False)
+        self._apply_planner_metadata(trace)
 
         safety_event = self.safety.check(task)
         trace.safety_events.append(safety_event)
@@ -59,10 +78,29 @@ class BrowserAgent:
         try:
             snapshot = self.observer.observe(self.browser)
             plan = self.planner.plan(task, snapshot, expected)
+            self._apply_planner_metadata(trace)
             if not plan.actions:
                 trace.failures.append(FailureEvent(category="planning_error", cause=plan.reason, evidence={"task": task}))
                 trace.recoveries.append(self.recovery.record_noop("No scaffold recovery available for unmatched task."))
             for step, planned in enumerate(plan.actions[:max_steps], start=1):
+                if planned.action_type == "needs_user":
+                    trace.actions.append(
+                        ActionRecord(
+                            step=step,
+                            action_type="needs_user",
+                            target="user",
+                            value=planned.value,
+                            status="skipped",
+                            evidence={"reason": planned.value or plan.reason},
+                        )
+                    )
+                    trace.status = "needs_user"
+                    trace.verified = False
+                    trace.final_evidence = {"reason": planned.value or plan.reason}
+                    path = self.logger.write(trace)
+                    return AgentRunResult(run_id, "needs_user", False, str(trace.final_evidence.get("reason", "")), path, trace.actions)
+                if planned.action_type == "stop":
+                    break
                 snapshot = self.observer.observe(self.browser)
                 located = self.locator.locate(planned.target_hint, snapshot)
                 if located is None:
@@ -118,8 +156,10 @@ class BrowserAgent:
                 "url": self.browser.snapshot().url,
             }
         except Exception as exc:  # pragma: no cover - defensive trace preservation
+            self._apply_planner_metadata(trace)
             trace.status = "failed"
-            trace.failures.append(FailureEvent(category="unknown_error", cause=str(exc)))
+            category = "planning_error" if self.config.planner == "llm" else "unknown_error"
+            trace.failures.append(FailureEvent(category=category, cause=str(redact_secrets(str(exc)))))
             trace.final_evidence = {"reason": "Unhandled runtime error."}
 
         path = self.logger.write(trace)
@@ -134,3 +174,14 @@ class BrowserAgent:
 
     def run_case(self, case: EvalCase) -> AgentRunResult:
         return self.run(case.start_url, case.task, expected=case.expected, case_id=case.id, max_steps=case.max_steps)
+
+    def _apply_planner_metadata(self, trace: AgentTrace) -> None:
+        trace.planner_type = self.config.planner
+        if isinstance(self.planner, LLMPlanner):
+            trace.llm_provider = self.planner.metadata.provider
+            trace.llm_model = self.planner.metadata.model
+            trace.llm_call_count = self.planner.metadata.call_count
+            trace.prompt_tokens = self.planner.metadata.prompt_tokens
+            trace.completion_tokens = self.planner.metadata.completion_tokens
+            trace.total_tokens = self.planner.metadata.total_tokens
+            trace.token_count = self.planner.metadata.total_tokens

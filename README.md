@@ -22,6 +22,8 @@ python3 -m pytest -q
 
 ## Run Eval
 
+Default rule-planner eval:
+
 ```bash
 python3 -m evals.run_eval --cases evals/cases.json
 python3 -m evals.run_eval --cases evals/cases_v1.json
@@ -31,6 +33,34 @@ This writes run traces to `logs/runs/` and reports to:
 
 - `logs/eval_report.json`
 - `logs/eval_report.md`
+
+## Planner Modes
+
+RulePlanner is the default and requires no environment variables:
+
+```bash
+python3 -m evals.run_eval --cases evals/cases_v1.json
+```
+
+Fake LLMPlanner dry run uses a mock provider and never calls an external API:
+
+```bash
+PLANNER=llm LLM_PROVIDER=fake python3 -m evals.run_eval --cases evals/cases_v1.json
+```
+
+Real OpenAI-compatible LLMPlanner is for local experiments later. Do not deploy a public LLM key on Zeabur.
+
+```bash
+PLANNER=llm \
+LLM_PROVIDER=openai \
+OPENAI_API_KEY=... \
+MAX_LLM_CALLS_PER_RUN=1 \
+MAX_STEPS=3 \
+MAX_OUTPUT_TOKENS=300 \
+python3 -m evals.run_eval --cases evals/cases_v1.json --case support_validation_001
+```
+
+LLMPlanner receives only agent-visible task and observation data. Runtime verifiers and offline evaluators remain deterministic and do not use LLM-as-judge.
 
 ## Start Web App
 
@@ -90,6 +120,7 @@ Use `/health` as a lightweight health route.
 ## Current Fake or Stubbed Pieces
 
 - Planner is a deterministic regex/rule-based fake planner.
+- LLMPlanner plumbing exists behind `PLANNER=llm`; fake mode is for tests/dry runs, while real API mode is local-only for now.
 - Browser adapter targets the simulator, not a real browser.
 - Real-browser support is read-only through Playwright; it does not click or fill forms on external sites.
 - Recovery records safe placeholders.

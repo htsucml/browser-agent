@@ -115,7 +115,7 @@ class AgentTrace:
     case_id: str | None
     start_url: str
     task: str
-    status: Literal["success", "failed", "refused"]
+    status: Literal["success", "failed", "refused", "needs_user"]
     verified: bool
     actions: list[ActionRecord] = field(default_factory=list)
     verifications: list[VerificationResult] = field(default_factory=list)
@@ -126,6 +126,13 @@ class AgentTrace:
     final_evidence: dict[str, Any] = field(default_factory=dict)
     token_count: int = 0
     cost_usd: float = 0.0
+    planner_type: str = "rule"
+    llm_provider: str | None = None
+    llm_model: str | None = None
+    llm_call_count: int = 0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
     started_at: str = field(default_factory=utc_now)
     finished_at: str | None = None
 
@@ -136,7 +143,7 @@ class AgentTrace:
 @dataclass
 class AgentRunResult:
     run_id: str
-    status: Literal["success", "failed", "refused"]
+    status: Literal["success", "failed", "refused", "needs_user"]
     verified: bool
     final_reason: str
     trace_path: str
