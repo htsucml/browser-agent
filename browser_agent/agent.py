@@ -11,6 +11,7 @@ from browser_agent.locator import Locator
 from browser_agent.logger import TraceLogger
 from browser_agent.observer import Observer
 from browser_agent.planner import RulePlanner
+from browser_agent.preflight import missing_required_info_plan
 from browser_agent.recovery import Recovery
 from browser_agent.safety import SafetyPolicy
 from browser_agent.schemas import (
@@ -77,7 +78,9 @@ class BrowserAgent:
 
         try:
             snapshot = self.observer.observe(self.browser)
-            plan = self.planner.plan(task, snapshot, expected)
+            plan = missing_required_info_plan(task, snapshot, expected)
+            if plan is None:
+                plan = self.planner.plan(task, snapshot, expected)
             self._apply_planner_metadata(trace)
             if not plan.actions:
                 trace.failures.append(FailureEvent(category="planning_error", cause=plan.reason, evidence={"task": task}))
@@ -96,7 +99,11 @@ class BrowserAgent:
                     )
                     trace.status = "needs_user"
                     trace.verified = False
-                    trace.final_evidence = {"reason": planned.value or plan.reason}
+                    trace.final_evidence = {
+                        "reason": planned.value or plan.reason,
+                        "state": self.browser.snapshot().state,
+                        "url": self.browser.snapshot().url,
+                    }
                     path = self.logger.write(trace)
                     return AgentRunResult(run_id, "needs_user", False, str(trace.final_evidence.get("reason", "")), path, trace.actions)
                 if planned.action_type == "stop":

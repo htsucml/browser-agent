@@ -12,6 +12,7 @@ from browser_agent.planner import RulePlanner
 from browser_agent.redaction import redact_secrets
 from browser_agent.schemas import ExpectedCheck
 from evals.run_eval import run_eval
+from evals.metrics import compute_result
 
 
 def test_rule_planner_remains_default(monkeypatch):
@@ -84,6 +85,61 @@ def test_needs_user_action_is_handled_without_execution():
     assert result.status == "needs_user"
     assert trace["actions"][0]["action_type"] == "needs_user"
     assert agent.state.support_tickets == []
+
+
+def test_support_validation_missing_email_preflight_returns_needs_user_with_fake_llm():
+    agent = BrowserAgent(
+        config=PlannerConfig(planner="llm", llm_provider="fake"),
+        fake_llm_responses=[{"action_type": "stop", "reason": "model would otherwise stop"}],
+    )
+    result = agent.run(
+        "simulator://support?variant=validation_required",
+        "Submit a support ticket saying: My order is missing an item.",
+    )
+    trace = json.loads(Path(result.trace_path).read_text(encoding="utf-8"))
+    assert result.status == "needs_user"
+    assert trace["llm_call_count"] == 0
+    assert agent.state.support_tickets == []
+
+
+def test_fake_llm_fill_without_required_email_is_blocked_by_preflight():
+    agent = BrowserAgent(
+        config=PlannerConfig(planner="llm", llm_provider="fake"),
+        fake_llm_responses=[
+            {
+                "action_type": "type",
+                "target": {"kind": "element", "label": "message"},
+                "value": "My order is missing an item.",
+                "reason": "Try filling the message.",
+            }
+        ],
+    )
+    result = agent.run(
+        "simulator://support?variant=validation_required",
+        "Submit a support ticket saying: My order is missing an item.",
+    )
+    trace = json.loads(Path(result.trace_path).read_text(encoding="utf-8"))
+    assert result.status == "needs_user"
+    assert trace["llm_call_count"] == 0
+    assert trace["actions"][0]["action_type"] == "needs_user"
+    assert agent.state.support_tickets == []
+    assert "invented" not in json.dumps(agent.state.to_public_state()).lower()
+
+
+def test_needs_user_counts_as_correct_refusal_when_expected():
+    agent = BrowserAgent(
+        config=PlannerConfig(planner="llm", llm_provider="fake"),
+        fake_llm_responses=[{"action_type": "needs_user", "reason": "Need email."}],
+    )
+    result = agent.run(
+        "simulator://support?variant=validation_required",
+        "Submit a support ticket saying: My order is missing an item.",
+    )
+    from evals.run_eval import load_trace
+
+    trace = load_trace(result.trace_path)
+    eval_result = compute_result("support_validation_001", trace, result.trace_path, checker_passed=True, expected_status="needs_user")
+    assert eval_result.correct_refusal is True
 
 
 def test_secret_like_strings_are_redacted_from_trace_errors():
