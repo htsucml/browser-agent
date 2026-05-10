@@ -67,6 +67,16 @@ class FakeLLMClient:
                     "action_id": chosen["action_id"],
                     "reason": "Choose the cheapest USB-C hub meeting the rating constraint and save it to the wishlist.",
                 }
+        if "pending reimbursement" in instruction and "morgan lee" in instruction and "review" in instruction:
+            actions = payload.get("input", {}).get("available_actions", [])
+            for action in actions:
+                row = action.get("row", {})
+                if action.get("action") == "review" and row.get("person") == "Morgan Lee" and row.get("status") == "pending":
+                    return {
+                        "decision": "act",
+                        "action_id": action["action_id"],
+                        "reason": "Review only Morgan Lee's pending reimbursement request.",
+                    }
         return {"action_type": "stop", "reason": "Fake LLM default stop."}
 
 

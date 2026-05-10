@@ -211,16 +211,35 @@ class BrowserAgent:
     def _validate_llm_action(self, planned, snapshot) -> str | None:
         if not isinstance(self.planner, LLMPlanner):
             return None
-        if not snapshot.url.startswith("simulator://shopping"):
+        if not (snapshot.url.startswith("simulator://shopping") or snapshot.url.startswith("simulator://dashboard")):
             return None
         payload = self.planner.metadata.last_payload or {}
         available_actions = payload.get("input", {}).get("available_actions", [])
         if not available_actions:
             return None
         action_id = (planned.metadata or {}).get("action_id")
-        allowed_ids = {str(action.get("action_id")) for action in available_actions if action.get("action_id")}
+        allowed_by_id = {str(action.get("action_id")): action for action in available_actions if action.get("action_id")}
+        allowed_ids = set(allowed_by_id)
         if not action_id:
-            return "Shopping LLM action must use an available action_id; fuzzy targets are not executable in guarded mode."
+            return "LLM action must use an available action_id; fuzzy targets are not executable in guarded mode."
         if str(action_id) not in allowed_ids:
-            return f"Unknown or disallowed shopping action_id: {action_id}"
+            return f"Unknown or disallowed action_id: {action_id}"
+        if snapshot.url.startswith("simulator://dashboard"):
+            return self._validate_dashboard_llm_action(str(action_id), allowed_by_id[str(action_id)], payload)
+        return None
+
+    def _validate_dashboard_llm_action(self, action_id: str, action: dict, payload: dict) -> str | None:
+        constraints = payload.get("input", {}).get("observation", {}).get("parsed_user_constraints", {})
+        row = action.get("row", {})
+        requested_action = constraints.get("action")
+        if requested_action and action.get("action") != requested_action:
+            return f"Dashboard action {action_id} does not match requested action {requested_action}."
+        if constraints.get("person") and row.get("person") != constraints["person"]:
+            return f"Dashboard action {action_id} targets the wrong person."
+        if constraints.get("kind") and row.get("kind") != constraints["kind"]:
+            return f"Dashboard action {action_id} targets the wrong row kind."
+        if constraints.get("status") and row.get("status") != constraints["status"]:
+            return f"Dashboard action {action_id} targets the wrong row status."
+        if action.get("action") == "approve" and requested_action != "approve":
+            return f"Dashboard approve action {action_id} is not allowed without an explicit approve request."
         return None
