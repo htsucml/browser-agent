@@ -36,3 +36,14 @@ def test_shopping_normal_constraint_item_passes_runtime_verification():
     assert result.status == "success"
     assert result.verified is True
     assert evaluate_expected(case, agent.state) is True
+
+
+def test_shopping_compare_cheapest_valid_item_saved_to_wishlist():
+    case = _case("shopping_compare_001")
+    agent = BrowserAgent()
+    result = agent.run_case(case)
+    assert result.status == "success"
+    assert result.verified is True
+    assert "Compact USB-C Hub" in agent.state.wishlist
+    assert "Compact USB-C Hub" not in agent.state.cart
+    assert evaluate_expected(case, agent.state) is True

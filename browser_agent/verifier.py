@@ -29,6 +29,10 @@ class Verifier:
         elif check.type == "cart_contains_item_matching":
             observed = snapshot.state.get("cart_items", [])
             passed = _collection_contains_matching(observed, snapshot.state.get("catalog", []), check.value)
+        elif check.type == "wishlist_contains_cheapest_matching":
+            observed = snapshot.state.get("wishlist_items", [])
+            cheapest = _cheapest_matching(snapshot.state.get("catalog", []), check.value)
+            passed = cheapest is not None and cheapest.get("name") in observed
         elif check.type == "settings_state_equals":
             observed = snapshot.state.get("settings", {}).get(check.target)
             passed = observed == check.value
@@ -62,6 +66,9 @@ def check_snapshot(check: ExpectedCheck, snapshot: BrowserSnapshot) -> bool:
         return snapshot.state.get(check.target) == check.value
     if check.type == "cart_contains_item_matching":
         return _collection_contains_matching(snapshot.state.get("cart_items", []), snapshot.state.get("catalog", []), check.value)
+    if check.type == "wishlist_contains_cheapest_matching":
+        cheapest = _cheapest_matching(snapshot.state.get("catalog", []), check.value)
+        return cheapest is not None and cheapest.get("name") in snapshot.state.get("wishlist_items", [])
     if check.type == "settings_state_equals":
         return snapshot.state.get("settings", {}).get(check.target) == check.value
     if check.type == "support_ticket_contains":
@@ -86,6 +93,13 @@ def _item_matches(item: dict[str, Any], spec: dict[str, Any]) -> bool:
 def _collection_contains_matching(names: list[str], catalog: list[dict[str, Any]], spec: dict[str, Any]) -> bool:
     selected = [item for item in catalog if item.get("name") in names]
     return any(_item_matches(item, spec) for item in selected)
+
+
+def _cheapest_matching(catalog: list[dict[str, Any]], spec: dict[str, Any]) -> dict[str, Any] | None:
+    matches = [item for item in catalog if _item_matches(item, spec)]
+    if not matches:
+        return None
+    return min(matches, key=lambda item: (item.get("price", 0), item.get("name", "")))
 
 
 def _ticket_matches(ticket: dict[str, str], spec: dict[str, str]) -> bool:

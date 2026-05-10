@@ -51,6 +51,15 @@ class RulePlanner:
                     reason="Rule matched support ticket form task with explicit email and message.",
                 )
 
+        if "wishlist" in lowered and any(word in lowered for word in ("cheapest", "least expensive", "lowest price")):
+            product = self._choose_wishlist_product(task, snapshot, expected)
+            if product:
+                return Plan(
+                    actions=[PlannedAction(action_type="click", target_hint=f"save {product} to wishlist")],
+                    expected=expected,
+                    reason="Rule matched cheapest wishlist shopping task.",
+                )
+
         if "add" in lowered and "cart" in lowered:
             product = self._choose_cart_product(task, snapshot, expected)
             return Plan(
@@ -74,6 +83,26 @@ class RulePlanner:
                 return str(item["name"])
         return "Red Shoes"
 
+    def _choose_wishlist_product(self, task: str, snapshot: BrowserSnapshot, expected: list[ExpectedCheck]) -> str | None:
+        for check in expected:
+            if check.type == "wishlist_contains_cheapest_matching" and isinstance(check.value, dict):
+                item = self._first_catalog_match(snapshot.state.get("catalog", []), check.value)
+                if item:
+                    return str(item["name"])
+        lowered = task.lower()
+        for item in self._catalog_matches_task(snapshot.state.get("catalog", []), lowered):
+            return str(item["name"])
+        return None
+
+    def _catalog_matches_task(self, catalog: list[dict[str, Any]], lowered_task: str) -> list[dict[str, Any]]:
+        matches = []
+        rating = self._extract_rating_floor(lowered_task)
+        for item in catalog:
+            category = str(item.get("category", "")).lower()
+            if category in lowered_task and (rating is None or item.get("rating", 0) >= rating):
+                matches.append(item)
+        return sorted(matches, key=lambda item: (item.get("price", 0), item.get("name", "")))
+
     def _first_catalog_match(self, catalog: list[dict[str, Any]], spec: dict[str, Any]) -> dict[str, Any] | None:
         matches = [item for item in catalog if self._item_matches(item, spec)]
         if not matches:
@@ -94,6 +123,10 @@ class RulePlanner:
     def _extract_email(self, task: str) -> str | None:
         match = re.search(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}", task)
         return match.group(0) if match else None
+
+    def _extract_rating_floor(self, lowered_task: str) -> float | None:
+        match = re.search(r"(?:at least|>=)\s*(\d+(?:\.\d+)?)\s*stars?", lowered_task)
+        return float(match.group(1)) if match else None
 
     def _extract_support_message(self, task: str) -> str | None:
         match = re.search(r"saying:\s*(.*?)(?:\.\s*Use email|\s+Use email|$)", task, flags=re.IGNORECASE)
