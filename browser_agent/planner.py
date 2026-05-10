@@ -69,6 +69,16 @@ class RulePlanner:
                     reason="Rule matched largest overdue invoice review task.",
                 )
 
+        if "reimbursement" in lowered and "pending" in lowered and any(word in lowered for word in ("reviewed", "review")):
+            reimbursement = self._choose_pending_reimbursement(task, snapshot)
+            if reimbursement:
+                person = str(reimbursement.get("person", ""))
+                return Plan(
+                    actions=[PlannedAction(action_type="click", target_hint=f"mark {person.lower()} reviewed")],
+                    expected=expected,
+                    reason="Rule matched pending reimbursement review task using trusted table state.",
+                )
+
         if "add" in lowered and "cart" in lowered:
             product = self._choose_cart_product(task, snapshot, expected)
             return Plan(
@@ -88,6 +98,27 @@ class RulePlanner:
         if not invoices:
             return None
         return max(invoices, key=lambda row: (row["amount"], str(row.get("id", ""))))
+
+    def _choose_pending_reimbursement(self, task: str, snapshot: BrowserSnapshot) -> dict[str, Any] | None:
+        requested_person = self._extract_person_from_task(task, snapshot.state.get("dashboard_rows", []))
+        if not requested_person:
+            return None
+        for row in snapshot.state.get("dashboard_rows", []):
+            if (
+                row.get("kind") == "reimbursement"
+                and row.get("status") == "pending"
+                and str(row.get("person", "")).lower() == requested_person.lower()
+            ):
+                return row
+        return None
+
+    def _extract_person_from_task(self, task: str, rows: list[dict[str, Any]]) -> str | None:
+        lowered = task.lower()
+        for row in rows:
+            person = row.get("person")
+            if isinstance(person, str) and person.lower() in lowered:
+                return person
+        return None
 
     def _choose_cart_product(self, task: str, snapshot: BrowserSnapshot, expected: list[ExpectedCheck]) -> str:
         for check in expected:
