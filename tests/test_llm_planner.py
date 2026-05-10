@@ -35,7 +35,7 @@ def test_fake_llm_structured_click_action_parses_and_executes():
         fake_llm_responses=[
             {
                 "action_type": "click",
-                "target": {"kind": "item_action", "item_name": "Budget Wireless Mouse", "action": "add_to_cart"},
+                "target": {"action_id": "shopping:add_to_cart:budget-wireless-mouse"},
                 "reason": "Pick the matching item.",
             }
         ],
@@ -102,6 +102,319 @@ def test_fake_llm_click_stable_action_id_settings_succeeds():
     assert result.verified is True
     assert trace["actions"][0]["target"] == "toggle:weekly-summary-emails"
     assert agent.state.settings["weekly_summary_emails"] is True
+
+
+def test_llm_payload_includes_shopping_available_action_ids():
+    client = FakeLLMClient(responses=[{"action_type": "stop", "reason": "inspect payload"}])
+    agent = BrowserAgent(config=PlannerConfig(planner="llm", llm_provider="fake"))
+    agent.planner = LLMPlanner(client, agent.config)
+    agent.run(
+        "simulator://shopping?variant=normal",
+        "Find the cheapest USB-C hub with at least 4.5 stars and save it to the wishlist.",
+    )
+
+    available_actions = client.last_payload["input"]["available_actions"]
+    action_ids = {action["action_id"] for action in available_actions}
+    assert "shopping:add_to_wishlist:compact-usb-c-hub" in action_ids
+    assert "shopping:add_to_cart:compact-usb-c-hub" not in action_ids
+    compact_action = next(action for action in available_actions if action["action_id"] == "shopping:add_to_wishlist:compact-usb-c-hub")
+    assert compact_action["destination"] == "wishlist"
+    assert compact_action["item"] == {
+        "name": "Compact USB-C Hub",
+        "category": "usb-c hub",
+        "price": 29,
+        "rating": 4.5,
+    }
+
+
+def test_compact_shopping_payload_excludes_unrelated_simulator_state():
+    client = FakeLLMClient(responses=[{"action_type": "stop", "reason": "inspect payload"}])
+    agent = BrowserAgent(config=PlannerConfig(planner="llm", llm_provider="fake"))
+    agent.planner = LLMPlanner(client, agent.config)
+    agent.run(
+        "simulator://shopping?variant=normal",
+        "Find the cheapest USB-C hub with at least 4.5 stars and save it to the wishlist.",
+    )
+
+    payload_text = json.dumps(client.last_payload, sort_keys=True)
+    assert "dashboard_rows" not in payload_text
+    assert "support_tickets" not in payload_text
+    assert "account_deleted" not in payload_text
+    assert "\"settings\"" not in payload_text
+    assert "Red Shoes" not in payload_text
+    assert "\"page_type\": \"shopping\"" in payload_text
+    assert "\"selection_policy\": \"cheapest_valid\"" in payload_text
+
+
+def test_fake_llm_shopping_compare_chooses_cheapest_wishlist_action_id():
+    agent = BrowserAgent(config=PlannerConfig(planner="llm", llm_provider="fake"))
+    result = agent.run(
+        "simulator://shopping?variant=normal",
+        "Find the cheapest USB-C hub with at least 4.5 stars and save it to the wishlist.",
+        expected=[
+            ExpectedCheck(
+                type="wishlist_contains_cheapest_matching",
+                target="wishlist",
+                value={"category": "usb-c hub", "rating_gte": 4.5},
+            )
+        ],
+    )
+    trace = json.loads(Path(result.trace_path).read_text(encoding="utf-8"))
+    assert result.status == "success"
+    assert result.verified is True
+    assert trace["actions"][0]["target"] == "button:wishlist-compact-usb-c-hub"
+    assert agent.state.wishlist == ["Compact USB-C Hub"]
+    assert agent.state.cart == []
+    assert "Pro USB-C Hub" not in agent.state.wishlist
+
+
+def test_llm_decision_action_id_schema_succeeds_for_shopping_compare():
+    agent = BrowserAgent(
+        config=PlannerConfig(planner="llm", llm_provider="fake"),
+        fake_llm_responses=[
+            {
+                "decision": "act",
+                "action_id": "shopping:add_to_wishlist:compact-usb-c-hub",
+                "reason": "It is the cheapest USB-C hub with rating at least 4.5.",
+            }
+        ],
+    )
+    result = agent.run(
+        "simulator://shopping?variant=normal",
+        "Find the cheapest USB-C hub with at least 4.5 stars and save it to the wishlist.",
+        expected=[
+            ExpectedCheck(
+                type="wishlist_contains_cheapest_matching",
+                target="wishlist",
+                value={"category": "usb-c hub", "rating_gte": 4.5},
+            )
+        ],
+    )
+    trace = json.loads(Path(result.trace_path).read_text(encoding="utf-8"))
+    assert result.status == "success"
+    assert result.verified is True
+    assert trace["actions"][0]["target"] == "button:wishlist-compact-usb-c-hub"
+    assert agent.state.wishlist == ["Compact USB-C Hub"]
+    assert agent.state.cart == []
+
+
+def test_llm_decision_action_id_parser_uses_compat_prefix_removal():
+    planner = LLMPlanner(FakeLLMClient(), PlannerConfig(planner="llm", llm_provider="fake"))
+    planned = planner._parse_action(
+        {
+            "decision": "act",
+            "action_id": "shopping:add_to_wishlist:compact-usb-c-hub",
+            "reason": "Real-like available-action selection.",
+        }
+    )
+    assert planned.action_type == "click"
+    assert planned.target_hint == "button:wishlist-compact-usb-c-hub"
+    assert planned.metadata == {"action_id": "shopping:add_to_wishlist:compact-usb-c-hub"}
+
+
+def test_llm_legacy_click_action_id_schema_still_succeeds_for_shopping_compare():
+    agent = BrowserAgent(
+        config=PlannerConfig(planner="llm", llm_provider="fake"),
+        fake_llm_responses=[
+            {
+                "action_type": "click",
+                "target": {"action_id": "shopping:add_to_wishlist:compact-usb-c-hub"},
+                "reason": "Legacy strict action-id response.",
+            }
+        ],
+    )
+    result = agent.run(
+        "simulator://shopping?variant=normal",
+        "Find the cheapest USB-C hub with at least 4.5 stars and save it to the wishlist.",
+        expected=[
+            ExpectedCheck(
+                type="wishlist_contains_cheapest_matching",
+                target="wishlist",
+                value={"category": "usb-c hub", "rating_gte": 4.5},
+            )
+        ],
+    )
+    assert result.status == "success"
+    assert result.verified is True
+    assert agent.state.wishlist == ["Compact USB-C Hub"]
+    assert agent.state.cart == []
+
+
+def test_real_like_shopping_compare_decision_output_parses_and_executes():
+    agent = BrowserAgent(
+        config=PlannerConfig(planner="llm", llm_provider="fake"),
+        fake_llm_responses=[
+            json.dumps(
+                {
+                    "decision": "act",
+                    "action_id": "shopping:add_to_wishlist:compact-usb-c-hub",
+                    "reason": "Compact USB-C Hub is the cheapest listed USB-C hub with rating at least 4.5.",
+                }
+            )
+        ],
+    )
+    result = agent.run(
+        "simulator://shopping?variant=normal",
+        "Find the cheapest USB-C hub with at least 4.5 stars and save it to the wishlist.",
+        expected=[
+            ExpectedCheck(
+                type="wishlist_contains_cheapest_matching",
+                target="wishlist",
+                value={"category": "usb-c hub", "rating_gte": 4.5},
+            )
+        ],
+    )
+    assert result.status == "success"
+    assert result.verified is True
+    assert agent.state.wishlist == ["Compact USB-C Hub"]
+    assert agent.state.cart == []
+
+
+def test_llm_semantic_action_type_without_action_id_fails_without_mutation():
+    agent = BrowserAgent(
+        config=PlannerConfig(planner="llm", llm_provider="fake"),
+        fake_llm_responses=[
+            {
+                "action_type": "add_to_wishlist",
+                "target": "Compact USB-C Hub",
+                "reason": "Semantic action without stable action id.",
+            }
+        ],
+    )
+    result = agent.run(
+        "simulator://shopping?variant=normal",
+        "Find the cheapest USB-C hub with at least 4.5 stars and save it to the wishlist.",
+        expected=[
+            ExpectedCheck(
+                type="wishlist_contains_cheapest_matching",
+                target="wishlist",
+                value={"category": "usb-c hub", "rating_gte": 4.5},
+            )
+        ],
+    )
+    trace = json.loads(Path(result.trace_path).read_text(encoding="utf-8"))
+    assert result.status == "failed"
+    assert trace["failures"][0]["category"] == "planning_error"
+    assert "Unsupported LLM action_type: add_to_wishlist" in trace["failures"][0]["cause"]
+    assert agent.state.wishlist == []
+    assert agent.state.cart == []
+
+
+def test_llm_shopping_fuzzy_button_target_is_rejected_before_state_mutation():
+    agent = BrowserAgent(
+        config=PlannerConfig(planner="llm", llm_provider="fake"),
+        fake_llm_responses=[
+            {
+                "action_type": "click",
+                "target": "button:add-red-shoes",
+                "reason": "Bad fuzzy target.",
+            }
+        ],
+    )
+    result = agent.run(
+        "simulator://shopping?variant=normal",
+        "Find the cheapest USB-C hub with at least 4.5 stars and save it to the wishlist.",
+        expected=[
+            ExpectedCheck(
+                type="wishlist_contains_cheapest_matching",
+                target="wishlist",
+                value={"category": "usb-c hub", "rating_gte": 4.5},
+            )
+        ],
+    )
+    trace = json.loads(Path(result.trace_path).read_text(encoding="utf-8"))
+    assert result.status == "failed"
+    assert trace["failures"][0]["category"] == "action_validation_error"
+    assert "available action_id" in trace["failures"][0]["cause"]
+    assert agent.state.cart == []
+    assert agent.state.wishlist == []
+
+
+def test_llm_shopping_wrong_destination_action_id_is_rejected_before_state_mutation():
+    agent = BrowserAgent(
+        config=PlannerConfig(planner="llm", llm_provider="fake"),
+        fake_llm_responses=[
+            {
+                "action_type": "click",
+                "target": {"action_id": "shopping:add_to_cart:compact-usb-c-hub"},
+                "reason": "Wrong destination.",
+            }
+        ],
+    )
+    result = agent.run(
+        "simulator://shopping?variant=normal",
+        "Find the cheapest USB-C hub with at least 4.5 stars and save it to the wishlist.",
+        expected=[
+            ExpectedCheck(
+                type="wishlist_contains_cheapest_matching",
+                target="wishlist",
+                value={"category": "usb-c hub", "rating_gte": 4.5},
+            )
+        ],
+    )
+    trace = json.loads(Path(result.trace_path).read_text(encoding="utf-8"))
+    assert result.status == "failed"
+    assert trace["failures"][0]["category"] == "action_validation_error"
+    assert agent.state.cart == []
+    assert agent.state.wishlist == []
+
+
+def test_llm_shopping_more_expensive_valid_hub_fails_verification_safely():
+    agent = BrowserAgent(
+        config=PlannerConfig(planner="llm", llm_provider="fake"),
+        fake_llm_responses=[
+            {
+                "action_type": "click",
+                "target": {"action_id": "shopping:add_to_wishlist:pro-usb-c-hub"},
+                "reason": "Choose a valid but not cheapest hub.",
+            }
+        ],
+    )
+    result = agent.run(
+        "simulator://shopping?variant=normal",
+        "Find the cheapest USB-C hub with at least 4.5 stars and save it to the wishlist.",
+        expected=[
+            ExpectedCheck(
+                type="wishlist_contains_cheapest_matching",
+                target="wishlist",
+                value={"category": "usb-c hub", "rating_gte": 4.5},
+            )
+        ],
+    )
+    trace = json.loads(Path(result.trace_path).read_text(encoding="utf-8"))
+    assert result.status == "failed"
+    assert trace["failures"][-1]["category"] == "verification_error"
+    assert agent.state.wishlist == ["Pro USB-C Hub"]
+    assert agent.state.cart == []
+
+
+def test_unknown_shopping_action_id_fails_safely():
+    agent = BrowserAgent(
+        config=PlannerConfig(planner="llm", llm_provider="fake"),
+        fake_llm_responses=[
+            {
+                "action_type": "click",
+                "target": {"action_id": "shopping:add_to_wishlist:not-a-real-item"},
+                "reason": "Unknown action.",
+            }
+        ],
+    )
+    result = agent.run(
+        "simulator://shopping?variant=normal",
+        "Find the cheapest USB-C hub with at least 4.5 stars and save it to the wishlist.",
+        expected=[
+            ExpectedCheck(
+                type="wishlist_contains_cheapest_matching",
+                target="wishlist",
+                value={"category": "usb-c hub", "rating_gte": 4.5},
+            )
+        ],
+    )
+    trace = json.loads(Path(result.trace_path).read_text(encoding="utf-8"))
+    assert result.status == "failed"
+    assert trace["failures"][0]["category"] == "action_validation_error"
+    assert agent.state.wishlist == []
+    assert agent.state.cart == []
 
 
 def test_invalid_json_from_fake_llm_is_controlled_failure():

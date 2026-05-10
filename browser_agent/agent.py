@@ -109,6 +109,21 @@ class BrowserAgent:
                 if planned.action_type == "stop":
                     break
                 snapshot = self.observer.observe(self.browser)
+                validation_error = self._validate_llm_action(planned, snapshot)
+                if validation_error:
+                    trace.actions.append(
+                        ActionRecord(
+                            step=step,
+                            action_type=planned.action_type,
+                            target=planned.target_hint,
+                            value=planned.value,
+                            status="failed",
+                            evidence={"reason": validation_error},
+                        )
+                    )
+                    trace.failures.append(FailureEvent(category="action_validation_error", cause=validation_error, step=step))
+                    trace.recoveries.append(self.recovery.record_noop("Rejected invalid LLM action before execution.", step=step))
+                    continue
                 located = self.locator.locate(planned.target_hint, snapshot)
                 if located is None:
                     trace.actions.append(
@@ -192,3 +207,20 @@ class BrowserAgent:
             trace.completion_tokens = self.planner.metadata.completion_tokens
             trace.total_tokens = self.planner.metadata.total_tokens
             trace.token_count = self.planner.metadata.total_tokens
+
+    def _validate_llm_action(self, planned, snapshot) -> str | None:
+        if not isinstance(self.planner, LLMPlanner):
+            return None
+        if not snapshot.url.startswith("simulator://shopping"):
+            return None
+        payload = self.planner.metadata.last_payload or {}
+        available_actions = payload.get("input", {}).get("available_actions", [])
+        if not available_actions:
+            return None
+        action_id = (planned.metadata or {}).get("action_id")
+        allowed_ids = {str(action.get("action_id")) for action in available_actions if action.get("action_id")}
+        if not action_id:
+            return "Shopping LLM action must use an available action_id; fuzzy targets are not executable in guarded mode."
+        if str(action_id) not in allowed_ids:
+            return f"Unknown or disallowed shopping action_id: {action_id}"
+        return None

@@ -51,6 +51,22 @@ class FakeLLMClient:
                 "target": "toggle:weekly-summary-emails",
                 "reason": "Enable the requested weekly summary emails setting.",
             }
+        if "cheapest" in instruction and "usb-c hub" in instruction and "wishlist" in instruction:
+            actions = payload.get("input", {}).get("available_actions", [])
+            valid_actions = [
+                action
+                for action in actions
+                if action.get("action") == "add_to_wishlist"
+                and action.get("item", {}).get("category") == "usb-c hub"
+                and float(action.get("item", {}).get("rating", 0)) >= 4.5
+            ]
+            if valid_actions:
+                chosen = min(valid_actions, key=lambda action: float(action.get("item", {}).get("price", 0)))
+                return {
+                    "decision": "act",
+                    "action_id": chosen["action_id"],
+                    "reason": "Choose the cheapest USB-C hub meeting the rating constraint and save it to the wishlist.",
+                }
         return {"action_type": "stop", "reason": "Fake LLM default stop."}
 
 

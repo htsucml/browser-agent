@@ -15,6 +15,7 @@ class PlannedAction:
     action_type: str
     target_hint: str
     value: str | None = None
+    metadata: dict[str, Any] | None = None
 
 
 @dataclass
