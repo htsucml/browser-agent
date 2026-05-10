@@ -46,7 +46,9 @@ Fake LLMPlanner dry run uses a mock provider and never calls an external API:
 
 ```bash
 PLANNER=llm LLM_PROVIDER=fake python3 -m evals.run_eval --cases evals/cases_v1.json
+PLANNER=llm LLM_PROVIDER=fake python3 -m evals.run_eval --cases evals/cases_llm_smoke.json
 ./scripts/llm_smoke_fake.sh
+./scripts/llm_smoke_suite_fake.sh
 ```
 
 Real OpenAI-compatible LLMPlanner is for local one-case experiments later. Do not deploy a public LLM key on Zeabur. This uses paid API credits.
@@ -67,6 +69,14 @@ Equivalent helper script:
 ```bash
 OPENAI_API_KEY=... ./scripts/llm_smoke_one_case.sh support_validation_001
 ```
+
+Four-case local LLM smoke suite for currently validated cases:
+
+```bash
+OPENAI_API_KEY=... ./scripts/llm_smoke_suite_openai.sh
+```
+
+The suite uses strict caps by default: `LLM_MODEL=gpt-4.1-nano`, `MAX_LLM_CALLS_PER_RUN=1`, `MAX_STEPS=3`, `MAX_OUTPUT_TOKENS=300`, and `REQUEST_TIMEOUT_SECONDS=30`. Run it locally only; do not put `OPENAI_API_KEY` on Zeabur yet.
 
 LLMPlanner receives only agent-visible task and observation data. Runtime verifiers and offline evaluators remain deterministic and do not use LLM-as-judge.
 

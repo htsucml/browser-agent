@@ -721,6 +721,13 @@ def test_fake_smoke_script_runs_without_api_key(monkeypatch):
     assert payload["cases"] == 1
 
 
+def test_fake_smoke_suite_script_runs_without_api_key(monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    result = subprocess.run(["sh", "scripts/llm_smoke_suite_fake.sh"], check=True, capture_output=True, text=True)
+    payload = json.loads(result.stdout)
+    assert payload["cases"] == 4
+
+
 def test_missing_openai_key_does_not_log_secret_like_env_value(monkeypatch):
     secret = "sk-shouldNotAppear123456789"
     monkeypatch.setenv("OPENAI_API_KEY_BACKUP", secret)
