@@ -41,6 +41,7 @@ Real-web mode is intentionally **read-only**: it opens the initial HTTP(S) URL, 
 - [Architecture](docs/ARCHITECTURE.md)
 - [Development Progress](docs/DEVELOPMENT_PROGRESS.md)
 - [Submission Notes](docs/SUBMISSION_NOTES.md)
+- [Prompt Records](prompts/README.md)
 
 ## Quickstart With Docker
 

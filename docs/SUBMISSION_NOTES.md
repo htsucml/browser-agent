@@ -2,9 +2,9 @@
 
 ## Links
 
-- GitHub: `<github-link-here>`
-- Zeabur: `<zeabur-link-here>`
-- Demo token: `<demo-token-here>`
+- GitHub: https://github.com/htsucml/browser-agent
+- Zeabur: Provided in the submission message.
+- Demo token: Provided in the submission message; not committed to the repository.
 
 Do not put a server-side `OPENAI_API_KEY` in the public Zeabur deployment. The demo is BYOK: reviewers provide their own key for one request.
 
