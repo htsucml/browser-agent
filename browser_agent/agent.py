@@ -5,7 +5,7 @@ from __future__ import annotations
 from browser_agent.browser import SimulatorBrowser
 from browser_agent.config import PlannerConfig
 from browser_agent.controller import Controller
-from browser_agent.llm_clients import make_llm_client
+from browser_agent.llm_clients import _USE_ENV_API_KEY, make_llm_client
 from browser_agent.llm_planner import LLMPlanner
 from browser_agent.locator import Locator
 from browser_agent.logger import TraceLogger
@@ -35,11 +35,13 @@ class BrowserAgent:
         logger: TraceLogger | None = None,
         config: PlannerConfig | None = None,
         fake_llm_responses: list | None = None,
+        llm_api_key: str | None | object = _USE_ENV_API_KEY,
     ):
         self.state = state or SimulatorState()
         self.browser = SimulatorBrowser(self.state)
         self.observer = Observer()
         self.config = config or PlannerConfig.from_env()
+        self.llm_api_key = llm_api_key
         self.planner = self._make_planner(fake_llm_responses)
         self.locator = Locator()
         self.controller = Controller()
@@ -50,7 +52,7 @@ class BrowserAgent:
 
     def _make_planner(self, fake_llm_responses: list | None = None):
         if self.config.planner == "llm":
-            client = make_llm_client(self.config.llm_provider, self.config.llm_model, fake_llm_responses)
+            client = make_llm_client(self.config.llm_provider, self.config.llm_model, fake_llm_responses, api_key=self.llm_api_key)
             return LLMPlanner(client, self.config)
         return RulePlanner()
 

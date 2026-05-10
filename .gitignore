@@ -5,6 +5,8 @@ __pycache__/
 logs/runs/*.json
 logs/eval_report.json
 logs/eval_report.md
+logs/ablation_report.json
+logs/ablation_report.md
 !logs/.gitkeep
 
 .env

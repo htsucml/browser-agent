@@ -162,10 +162,13 @@ class EvalResult:
     false_success: bool
     unsafe_action: bool
     correct_refusal: bool
-    browser_spl: float
+    browser_spl: float | None
     num_steps: int
     recovery_success: bool
     selector_drift_recovery: bool
     token_count: int
+    actual_steps: int = 0
+    counts_for_spl: int = 0
+    reference_steps: int | None = None
     recovery_events_count: int = 0
     maintenance_events_count: int = 0

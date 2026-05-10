@@ -27,12 +27,29 @@ Default rule-planner eval:
 ```bash
 python3 -m evals.run_eval --cases evals/cases.json
 python3 -m evals.run_eval --cases evals/cases_v1.json
+python3 -m evals.run_eval --cases evals/cases_smoke.json
+python3 -m evals.run_eval --cases evals/cases_dev.json
 ```
 
 This writes run traces to `logs/runs/` and reports to:
 
 - `logs/eval_report.json`
 - `logs/eval_report.md`
+
+Dataset split scaffolding:
+
+- `evals/cases_smoke.json`: current 2-case smoke set.
+- `evals/cases_dev.json`: current Dataset v1 development set.
+- `evals/cases_test.json`: small placeholder copied subset for plumbing only. A true test split should be frozen and not tuned on.
+- `evals/cases_llm_smoke.json`: four-case LLM smoke suite.
+
+Compare planner configs with the ablation runner:
+
+```bash
+python3 -m evals.run_ablation --cases evals/cases_llm_smoke.json --configs rule,llm_fake
+```
+
+This writes `logs/ablation_report.json` and `logs/ablation_report.md`. The ablation runner does not run real OpenAI by default; add real-key configs manually later only for local experiments.
 
 ## Planner Modes
 
@@ -41,6 +58,8 @@ RulePlanner is the default and requires no environment variables:
 ```bash
 python3 -m evals.run_eval --cases evals/cases_v1.json
 ```
+
+RulePlanner is a baseline and integration-test driver, not the long-term intelligence layer. Future improvements should prefer shared pipeline mechanisms such as available-action generation, executor behavior, verifier coverage, preflight checks, recovery, and memory. Avoid growing case-specific rule spaghetti.
 
 Fake LLMPlanner dry run uses a mock provider and never calls an external API:
 
@@ -79,6 +98,43 @@ OPENAI_API_KEY=... ./scripts/llm_smoke_suite_openai.sh
 The suite uses strict caps by default: `LLM_MODEL=gpt-4.1-nano`, `MAX_LLM_CALLS_PER_RUN=1`, `MAX_STEPS=3`, `MAX_OUTPUT_TOKENS=300`, and `REQUEST_TIMEOUT_SECONDS=30`. Run it locally only; do not put `OPENAI_API_KEY` on Zeabur yet.
 
 LLMPlanner receives only agent-visible task and observation data. Runtime verifiers and offline evaluators remain deterministic and do not use LLM-as-judge.
+
+## BYOK Demo Mode
+
+The web app supports bring-your-own-key OpenAI runs for simulator tasks. BYOK is disabled by default and a submitted key is used only for that one request. The app does not store keys in traces, logs, cookies, localStorage, files, or app state, and key-like strings are redacted from trace errors.
+
+Local BYOK app test:
+
+```bash
+ALLOW_BYOK=true \
+ALLOW_SERVER_OPENAI_KEY=false \
+DEMO_TOKEN=local-demo-password \
+MAX_ACTIVE_RUNS=1 \
+MAX_LLM_CALLS_PER_RUN=1 \
+MAX_STEPS=3 \
+MAX_OUTPUT_TOKENS=300 \
+MAX_RUN_SECONDS=30 \
+MAX_EXTRACT_CHARS=10000 \
+python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+Then open `http://127.0.0.1:8000`, select `llm` and `openai`, enter the demo token and your OpenAI key in the password fields, and run one of the simulator smoke tasks.
+
+For public Zeabur demos, prefer BYOK and do not configure a server-side `OPENAI_API_KEY`. Recommended Zeabur environment variables:
+
+```bash
+ALLOW_BYOK=true
+ALLOW_SERVER_OPENAI_KEY=false
+DEMO_TOKEN=<random-password>
+MAX_ACTIVE_RUNS=1
+MAX_LLM_CALLS_PER_RUN=1
+MAX_STEPS=3
+MAX_OUTPUT_TOKENS=300
+MAX_RUN_SECONDS=30
+MAX_EXTRACT_CHARS=10000
+```
+
+Do not enter secrets unless you trust the deployment. A BYOK request sends the key to this backend for that request only.
 
 ## Start Web App
 

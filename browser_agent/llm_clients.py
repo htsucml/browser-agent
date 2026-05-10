@@ -8,6 +8,7 @@ import urllib.request
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+_USE_ENV_API_KEY = object()
 
 @dataclass
 class LLMResponse:
@@ -88,9 +89,9 @@ class OpenAICompatibleLLMClient:
 
     provider = "openai"
 
-    def __init__(self, model: str):
+    def __init__(self, model: str, api_key: str | None | object = _USE_ENV_API_KEY):
         self.model = model
-        self._api_key = os.environ.get("OPENAI_API_KEY")
+        self._api_key = os.environ.get("OPENAI_API_KEY") if api_key is _USE_ENV_API_KEY else api_key
 
     def generate_json(self, payload: dict[str, Any], max_output_tokens: int, timeout_seconds: float) -> LLMResponse:
         if not self._api_key:
@@ -127,9 +128,14 @@ class OpenAICompatibleLLMClient:
         )
 
 
-def make_llm_client(provider: str, model: str, responses: list[str | dict[str, Any]] | None = None) -> LLMClient:
+def make_llm_client(
+    provider: str,
+    model: str,
+    responses: list[str | dict[str, Any]] | None = None,
+    api_key: str | None | object = _USE_ENV_API_KEY,
+) -> LLMClient:
     if provider == "fake":
         return FakeLLMClient(responses=list(responses or []))
     if provider == "openai":
-        return OpenAICompatibleLLMClient(model=model)
+        return OpenAICompatibleLLMClient(model=model, api_key=api_key)
     raise ValueError(f"Unsupported LLM provider: {provider}")

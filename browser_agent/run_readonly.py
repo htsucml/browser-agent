@@ -9,10 +9,11 @@ from typing import Any
 
 from browser_agent.browser import PlaywrightBrowserBackend
 from browser_agent.logger import TraceLogger
+from browser_agent.redaction import redact_secrets
 from browser_agent.schemas import AgentTrace, new_id
 
 
-def run_readonly(url: str, task: str, screenshot: str | None = None) -> dict[str, Any]:
+def run_readonly(url: str, task: str, screenshot: str | None = None, max_extract_chars: int = 10000) -> dict[str, Any]:
     run_id = new_id("readonly")
     trace = AgentTrace(run_id=run_id, case_id=None, start_url=url, task=task, status="failed", verified=False)
     backend = None
@@ -31,14 +32,14 @@ def run_readonly(url: str, task: str, screenshot: str | None = None) -> dict[str
             "url": snapshot.url,
             "title": snapshot.title,
             "headings": snapshot.headings or [],
-            "visible_text_snippet": snapshot.text[:1000],
+            "visible_text_snippet": snapshot.text[: min(1000, max_extract_chars)],
             "links_count": snapshot.links_count,
             "screenshot_path": screenshot_path,
         }
     except Exception as exc:
         trace.status = "failed"
         trace.verified = False
-        trace.final_evidence = {"reason": str(exc), "url": url}
+        trace.final_evidence = {"reason": redact_secrets(str(exc)), "url": url}
     finally:
         if backend is not None:
             try:

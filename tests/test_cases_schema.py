@@ -44,3 +44,17 @@ def test_cases_llm_smoke_preserves_v1_status_and_checks():
         source_case = v1_by_id[smoke_case["id"]]
         assert smoke_case["expected_status"] == source_case["expected_status"]
         assert smoke_case["expected"] == source_case["expected"]
+
+
+def test_dataset_split_files_load_and_validate():
+    schema = json.loads(Path("evals/cases.schema.json").read_text(encoding="utf-8"))
+    expected_lengths = {
+        "evals/cases_smoke.json": 2,
+        "evals/cases_dev.json": 13,
+        "evals/cases_test.json": 4,
+        "evals/cases_llm_smoke.json": 4,
+    }
+    for path, length in expected_lengths.items():
+        cases = json.loads(Path(path).read_text(encoding="utf-8"))
+        validate(instance=cases, schema=schema)
+        assert len(load_cases(path)) == length

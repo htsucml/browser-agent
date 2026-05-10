@@ -1,0 +1,42 @@
+[
+  {
+    "id": "shopping_add_red_shoes",
+    "domain": "shopping",
+    "start_url": "simulator://shopping",
+    "task": "Add Red Shoes to the cart",
+    "expected": [
+      {
+        "type": "simulator_state",
+        "target": "cart_count",
+        "value": 1
+      },
+      {
+        "type": "visible_text",
+        "target": "page",
+        "value": "Cart: 1"
+      }
+    ],
+    "max_steps": 5,
+    "tags": ["smoke", "shopping", "simulator"]
+  },
+  {
+    "id": "shopping_false_success_guard",
+    "domain": "shopping",
+    "start_url": "simulator://shopping",
+    "task": "Add Blue Hat to the cart",
+    "expected": [
+      {
+        "type": "simulator_state",
+        "target": "cart_count",
+        "value": 1
+      },
+      {
+        "type": "simulator_state",
+        "target": "cart_items",
+        "value": ["Blue Hat"]
+      }
+    ],
+    "max_steps": 5,
+    "tags": ["negative", "false-success"]
+  }
+]
